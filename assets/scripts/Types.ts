@@ -39,6 +39,11 @@ export interface DropItem {
     isNew: boolean;
 }
 
+export interface ObstacleData {
+    ice: number;  // 0: 无, 1: 单层薄冰, 2: 双层厚冰
+    vine: number; // 0: 无, 1: 荆棘藤蔓锁住
+}
+
 export const GAME_CONFIG = {
     ROWS: 8,
     COLS: 8,

@@ -275,9 +275,12 @@ export class MatchLogic {
     }
 
     /**
-     * 重力下落计算：将上方所有剩余元素压实到底部，并从顶部产生新生元素
+     * 重力下落计算：将上方所有剩余元素压实到底部，并从顶部产生新生元素 (支持藤蔓固定阻隔)
      */
-    public static calculateDrop(grid: (TileData | null)[][]): { drops: DropItem[]; newTiles: TileData[] } {
+    public static calculateDrop(
+        grid: (TileData | null)[][],
+        isLocked?: (r: number, c: number) => boolean
+    ): { drops: DropItem[]; newTiles: TileData[] } {
         const rows = GAME_CONFIG.ROWS;
         const cols = GAME_CONFIG.COLS;
         const drops: DropItem[] = [];
@@ -289,6 +292,9 @@ export class MatchLogic {
             for (let r = 0; r < rows; r++) {
                 if (grid[r][c] === null) {
                     emptyCount++;
+                } else if (isLocked && isLocked(r, c)) {
+                    // 该格被藤蔓锁定，不能下落，上方重力在藤蔓头顶重新累计
+                    emptyCount = 0;
                 } else if (emptyCount > 0) {
                     // 下移
                     const tile = grid[r][c]!;

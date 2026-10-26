@@ -52,8 +52,195 @@ export class ArtFactory {
     }
 
     /**
-     * 绘制 Q 弹果冻动物基础身体与表情
+     * 获取冰块纹理 (level: 1 薄冰, 2 厚冰)
      */
+    public static getIceSprite(level: number): SpriteFrame {
+        const key = `ice_${level}`;
+        if (this.cache.has(key)) return this.cache.get(key)!;
+
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+
+        const pad = 12;
+        const w = size - pad * 2;
+        const h = size - pad * 2;
+        const rad = 28;
+
+        ctx.save();
+        // 冰块晶莹底托
+        const isThick = level >= 2;
+        const grad = ctx.createLinearGradient(pad, pad, size - pad, size - pad);
+        if (isThick) {
+            grad.addColorStop(0, 'rgba(235, 250, 255, 0.92)');
+            grad.addColorStop(0.5, 'rgba(165, 215, 255, 0.82)');
+            grad.addColorStop(1, 'rgba(120, 185, 245, 0.88)');
+        } else {
+            grad.addColorStop(0, 'rgba(240, 252, 255, 0.72)');
+            grad.addColorStop(0.6, 'rgba(180, 230, 255, 0.55)');
+            grad.addColorStop(1, 'rgba(140, 210, 250, 0.65)');
+        }
+
+        ctx.beginPath();
+        ctx.roundRect(pad, pad, w, h, rad);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // 冰晶高光边框
+        ctx.lineWidth = isThick ? 6 : 4;
+        ctx.strokeStyle = isThick ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.8)';
+        ctx.stroke();
+
+        // 冰块内部冰裂纹与晶花
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.beginPath();
+        // 左上到中央折裂纹
+        ctx.moveTo(pad + 30, pad + 35);
+        ctx.lineTo(size * 0.42, size * 0.38);
+        ctx.lineTo(size * 0.52, size * 0.55);
+        if (isThick) {
+            ctx.lineTo(size * 0.75, size * 0.62);
+            ctx.lineTo(size - pad - 25, size * 0.82);
+            // 次级裂纹
+            ctx.moveTo(size * 0.42, size * 0.38);
+            ctx.lineTo(size * 0.35, size * 0.68);
+            ctx.moveTo(size * 0.52, size * 0.55);
+            ctx.lineTo(size * 0.68, size * 0.35);
+        }
+        ctx.stroke();
+
+        // 四角冰晶小雪花/十字星芒
+        this.drawIceStar(ctx, pad + 36, pad + 36, 12);
+        this.drawIceStar(ctx, size - pad - 36, size - pad - 36, 10);
+        if (isThick) {
+            this.drawIceStar(ctx, size - pad - 42, pad + 40, 14);
+        }
+
+        ctx.restore();
+
+        const imgAsset = new ImageAsset(canvas);
+        const texture = new Texture2D();
+        texture.image = imgAsset;
+        const sf = new SpriteFrame();
+        sf.texture = texture;
+        this.cache.set(key, sf);
+        return sf;
+    }
+
+    /**
+     * 获取荆棘藤蔓锁定纹理
+     */
+    public static getVineSprite(): SpriteFrame {
+        const key = 'vine_lock';
+        if (this.cache.has(key)) return this.cache.get(key)!;
+
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+
+        const cx = size / 2;
+        const cy = size / 2;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 4;
+
+        // 粗壮荆棘交叉藤条 (从四角向中心交叉)
+        ctx.lineWidth = 14;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#27ae60';
+
+        // 枝条 1：左上到右下
+        ctx.beginPath();
+        ctx.moveTo(35, 45);
+        ctx.quadraticCurveTo(cx - 15, cy + 10, size - 35, size - 45);
+        ctx.stroke();
+
+        // 枝条 2：右上到左下
+        ctx.beginPath();
+        ctx.moveTo(size - 35, 45);
+        ctx.quadraticCurveTo(cx + 15, cy - 10, 35, size - 45);
+        ctx.stroke();
+
+        // 深绿阴影内芯
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = '#1e824c';
+        ctx.beginPath();
+        ctx.moveTo(35, 45);
+        ctx.quadraticCurveTo(cx - 15, cy + 10, size - 35, size - 45);
+        ctx.moveTo(size - 35, 45);
+        ctx.quadraticCurveTo(cx + 15, cy - 10, 35, size - 45);
+        ctx.stroke();
+
+        // 中心木质荆棘结扣
+        ctx.beginPath();
+        ctx.arc(cx, cy, 16, 0, Math.PI * 2);
+        ctx.fillStyle = '#145a32';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+        ctx.fillStyle = '#2ecc71';
+        ctx.fill();
+
+        // 点缀鲜嫩小绿叶
+        this.drawLeaf(ctx, 65, 75, -0.6);
+        this.drawLeaf(ctx, size - 65, 80, 0.7);
+        this.drawLeaf(ctx, 75, size - 85, 2.2);
+        this.drawLeaf(ctx, size - 75, size - 80, -2.4);
+        this.drawLeaf(ctx, cx, cy - 35, 0.1);
+
+        ctx.restore();
+
+        const imgAsset = new ImageAsset(canvas);
+        const texture = new Texture2D();
+        texture.image = imgAsset;
+        const sf = new SpriteFrame();
+        sf.texture = texture;
+        this.cache.set(key, sf);
+        return sf;
+    }
+
+    private static drawIceStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+        ctx.save();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x - r, y);
+        ctx.lineTo(x + r, y);
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x, y + r);
+        ctx.moveTo(x - r * 0.6, y - r * 0.6);
+        ctx.lineTo(x + r * 0.6, y + r * 0.6);
+        ctx.moveTo(x + r * 0.6, y - r * 0.6);
+        ctx.lineTo(x - r * 0.6, y + r * 0.6);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    private static drawLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(12, -10, 22, 0);
+        ctx.quadraticCurveTo(12, 10, 0, 0);
+        ctx.fillStyle = '#2ecc71';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(2, 0);
+        ctx.lineTo(16, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
     private static drawJellyAnimal(ctx: CanvasRenderingContext2D, size: number, type: AnimalType) {
         const cx = size / 2;
         const cy = size / 2;

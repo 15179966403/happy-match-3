@@ -1,8 +1,9 @@
-import { _decorator, Component, Node, Graphics, UITransform, Label, Color, v3, Vec3, EventTouch, tween, Tween, Layers, Camera } from 'cc';
-import { AnimalType, SpecialType, TileData, MatchGroup, GAME_CONFIG } from './Types';
+import { _decorator, Component, Node, Graphics, UITransform, Label, Color, v3, Vec3, EventTouch, tween, Tween, Layers, Camera, Sprite, SpriteFrame } from 'cc';
+import { AnimalType, SpecialType, TileData, MatchGroup, ObstacleData, GAME_CONFIG } from './Types';
 import { TileItem } from './TileItem';
 import { MatchLogic } from './MatchLogic';
 import { AudioService } from './AudioService';
+import { ArtFactory } from './ArtFactory';
 
 const { ccclass } = _decorator;
 
@@ -17,9 +18,18 @@ export class GameManager extends Component {
     private titleLabel: Label = null!;
     private scoreLabel: Label = null!;
     private movesLabel: Label = null!;
+    private iceLabel: Label = null!;
     private bannerNode: Node = null!;
     private bannerLabel: Label = null!;
     private modalNode: Node = null!;
+
+    // 障碍物系统 (冰块与藤蔓)
+    private iceContainer: Node = null!;
+    private vineContainer: Node = null!;
+    private obstacleData: ObstacleData[][] = [];
+    private iceNodes: (Node | null)[][] = [];
+    private vineNodes: (Node | null)[][] = [];
+    private totalIceCount: number = 0;
 
     // 游戏数值与连续无尽闯关
     private currentLevel: number = 1;
@@ -45,6 +55,14 @@ export class GameManager extends Component {
         if (width > 0 && height > 0) {
             trans.setContentSize(width, height);
         }
+        return node;
+    }
+
+    private createObstacleSpriteNode(name: string, sf: SpriteFrame): Node {
+        const node = this.createUINode(name, GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE);
+        const sp = node.addComponent(Sprite);
+        sp.sizeMode = Sprite.SizeMode.CUSTOM;
+        sp.spriteFrame = sf;
         return node;
     }
 
@@ -127,65 +145,77 @@ export class GameManager extends Component {
             .repeatForever()
             .start();
 
-        // 3. 计分板与步数信息栏 (果冻曲奇立体卡片)
-        const infoBar = this.createUINode('InfoBar', 700, 110);
+        // 3. 计分板与步数信息栏 (果冻曲奇立体三卡片布局)
+        const infoBar = this.createUINode('InfoBar', 720, 110);
         infoBar.setPosition(0, 465, 0);
         this.node.addChild(infoBar);
 
         // 步数卡片 (金黄香脆曲奇风)
-        const movesCard = this.createUINode('MovesCard', 220, 84);
-        movesCard.setPosition(-165, 0, 0);
+        const movesCard = this.createUINode('MovesCard', 190, 80);
+        movesCard.setPosition(-235, 0, 0);
         const movesBg = movesCard.addComponent(Graphics);
-
-        // 阴影底衬
         movesBg.fillColor = new Color(210, 105, 0);
-        movesBg.roundRect(-102, -40, 204, 80, 22);
+        movesBg.roundRect(-88, -38, 176, 76, 20);
         movesBg.fill();
-
-        // 表面亮色卡板
         movesBg.fillColor = new Color(255, 155, 25);
-        movesBg.roundRect(-102, -36, 204, 76, 20);
+        movesBg.roundRect(-88, -34, 176, 72, 18);
         movesBg.fill();
-
-        // 顶部高光条
         movesBg.fillColor = new Color(255, 255, 255, 70);
-        movesBg.roundRect(-90, 8, 180, 16, 8);
+        movesBg.roundRect(-78, 6, 156, 14, 7);
         movesBg.fill();
 
-        const movesText = this.createUINode('MovesText', 200, 50);
+        const movesText = this.createUINode('MovesText', 170, 50);
         this.movesLabel = movesText.addComponent(Label);
         this.movesLabel.string = `⚡ 步数: ${this.remainingMoves}`;
-        this.movesLabel.fontSize = 25;
-        this.movesLabel.lineHeight = 26;
+        this.movesLabel.fontSize = 22;
+        this.movesLabel.lineHeight = 24;
         this.movesLabel.color = Color.WHITE;
         this.movesLabel.isBold = true;
         movesCard.addChild(movesText);
         infoBar.addChild(movesCard);
 
+        // 冰块目标卡片 (浅冰蓝冰晶风)
+        const iceCard = this.createUINode('IceCard', 190, 80);
+        iceCard.setPosition(-25, 0, 0);
+        const iceBg = iceCard.addComponent(Graphics);
+        iceBg.fillColor = new Color(40, 120, 190);
+        iceBg.roundRect(-88, -38, 176, 76, 20);
+        iceBg.fill();
+        iceBg.fillColor = new Color(70, 175, 245);
+        iceBg.roundRect(-88, -34, 176, 72, 18);
+        iceBg.fill();
+        iceBg.fillColor = new Color(255, 255, 255, 80);
+        iceBg.roundRect(-78, 6, 156, 14, 7);
+        iceBg.fill();
+
+        const iceText = this.createUINode('IceText', 170, 50);
+        this.iceLabel = iceText.addComponent(Label);
+        this.iceLabel.string = `❄️ 冰块: 0`;
+        this.iceLabel.fontSize = 22;
+        this.iceLabel.lineHeight = 24;
+        this.iceLabel.color = Color.WHITE;
+        this.iceLabel.isBold = true;
+        iceCard.addChild(iceText);
+        infoBar.addChild(iceCard);
+
         // 分数卡片 (翡翠薄荷糖果风)
-        const scoreCard = this.createUINode('ScoreCard', 250, 84);
-        scoreCard.setPosition(165, 0, 0);
+        const scoreCard = this.createUINode('ScoreCard', 230, 80);
+        scoreCard.setPosition(205, 0, 0);
         const scoreBg = scoreCard.addComponent(Graphics);
-
-        // 阴影底衬
         scoreBg.fillColor = new Color(25, 135, 80);
-        scoreBg.roundRect(-122, -40, 244, 80, 22);
+        scoreBg.roundRect(-110, -38, 220, 76, 20);
         scoreBg.fill();
-
-        // 表面亮色卡板
         scoreBg.fillColor = new Color(46, 204, 113);
-        scoreBg.roundRect(-122, -36, 244, 76, 20);
+        scoreBg.roundRect(-110, -34, 220, 72, 18);
         scoreBg.fill();
-
-        // 顶部高光条
         scoreBg.fillColor = new Color(255, 255, 255, 70);
-        scoreBg.roundRect(-110, 8, 220, 16, 8);
+        scoreBg.roundRect(-100, 6, 200, 14, 7);
         scoreBg.fill();
 
-        const scoreText = this.createUINode('ScoreText', 230, 50);
+        const scoreText = this.createUINode('ScoreText', 210, 50);
         this.scoreLabel = scoreText.addComponent(Label);
-        this.scoreLabel.string = `⭐ 得分: 0 / ${GAME_CONFIG.TARGET_SCORE}`;
-        this.scoreLabel.fontSize = 20;
+        this.scoreLabel.string = `⭐ 得分: 0 / ${this.targetScore}`;
+        this.scoreLabel.fontSize = 19;
         this.scoreLabel.lineHeight = 22;
         this.scoreLabel.color = Color.WHITE;
         this.scoreLabel.isBold = true;
@@ -239,10 +269,20 @@ export class GameManager extends Component {
         }
         this.node.addChild(boardBgNode);
 
+        // 4.5 冰块容器层 (垫在底盘上、动物脚下)
+        this.iceContainer = this.createUINode('IceContainer', totalW, totalH);
+        this.iceContainer.setPosition(0, -35, 0);
+        this.node.addChild(this.iceContainer);
+
         // 5. 棋盘动物元素容器
         this.boardContainer = this.createUINode('BoardContainer', totalW, totalH);
         this.boardContainer.setPosition(0, -35, 0);
         this.node.addChild(this.boardContainer);
+
+        // 5.5 荆棘藤蔓容器层 (锁在动物身上，处于最上层)
+        this.vineContainer = this.createUINode('VineContainer', totalW, totalH);
+        this.vineContainer.setPosition(0, -35, 0);
+        this.node.addChild(this.vineContainer);
 
         // 监听全局触摸
         this.boardContainer.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
@@ -288,6 +328,9 @@ export class GameManager extends Component {
         this.currentCombo = 0;
         this.isGameOver = false;
         this.modalNode.active = false;
+
+        // 初始化障碍物 (冰块与藤蔓)
+        this.initObstacles(this.currentLevel);
         this.updateUI();
 
         // 清理旧图块
@@ -316,9 +359,256 @@ export class GameManager extends Component {
         }
     }
 
+    /**
+     * 根据关卡初始化冰块与藤蔓障碍物
+     */
+    public initObstacles(level: number) {
+        if (!this.iceContainer || !this.vineContainer) return;
+        this.iceContainer.removeAllChildren();
+        this.vineContainer.removeAllChildren();
+        this.obstacleData = [];
+        this.iceNodes = [];
+        this.vineNodes = [];
+        this.totalIceCount = 0;
+
+        for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
+            this.obstacleData[r] = [];
+            this.iceNodes[r] = [];
+            this.vineNodes[r] = [];
+            for (let c = 0; c < GAME_CONFIG.COLS; c++) {
+                this.obstacleData[r][c] = { ice: 0, vine: 0 };
+                this.iceNodes[r][c] = null;
+                this.vineNodes[r][c] = null;
+            }
+        }
+
+        if (level === 1) {
+            // 第 1 关：底部薄冰阵，中间两处荆棘
+            for (let c = 1; c <= 6; c++) {
+                this.setIce(0, c, 1);
+                this.setIce(1, c, 1);
+            }
+            this.setVine(3, 2);
+            this.setVine(3, 5);
+        } else if (level === 2) {
+            // 第 2 关：四角坚冰阵，中间四角荆棘
+            const corners = [
+                [0, 0], [0, 1], [1, 0], [1, 1],
+                [0, 6], [0, 7], [1, 6], [1, 7],
+                [6, 0], [6, 1], [7, 0], [7, 1],
+                [6, 6], [6, 7], [7, 6], [7, 7]
+            ];
+            corners.forEach(([r, c]) => this.setIce(r, c, 2));
+            this.setVine(3, 3);
+            this.setVine(3, 4);
+            this.setVine(4, 3);
+            this.setVine(4, 4);
+        } else {
+            // 第 3 关及以上：冰霜十字 + 荆棘阵列
+            for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
+                for (let c = 0; c < GAME_CONFIG.COLS; c++) {
+                    if ((r <= 1 || r >= 6) && (c >= 1 && c <= 6)) {
+                        this.setIce(r, c, level >= 4 ? 2 : 1);
+                    }
+                }
+            }
+            this.setVine(2, 2);
+            this.setVine(2, 5);
+            this.setVine(5, 2);
+            this.setVine(5, 5);
+        }
+    }
+
+    private setIce(r: number, c: number, iceLevel: number) {
+        if (r < 0 || r >= GAME_CONFIG.ROWS || c < 0 || c >= GAME_CONFIG.COLS) return;
+        this.obstacleData[r][c].ice = iceLevel;
+        this.totalIceCount++;
+
+        const sf = ArtFactory.getIceSprite(iceLevel);
+        const node = this.createObstacleSpriteNode(`Ice_${r}_${c}`, sf);
+        node.setPosition(TileItem.getPos(r, c));
+        this.iceContainer.addChild(node);
+        this.iceNodes[r][c] = node;
+    }
+
+    private setVine(r: number, c: number) {
+        if (r < 0 || r >= GAME_CONFIG.ROWS || c < 0 || c >= GAME_CONFIG.COLS) return;
+        this.obstacleData[r][c].vine = 1;
+
+        const sf = ArtFactory.getVineSprite();
+        const node = this.createObstacleSpriteNode(`Vine_${r}_${c}`, sf);
+        node.setPosition(TileItem.getPos(r, c));
+        this.vineContainer.addChild(node);
+        this.vineNodes[r][c] = node;
+    }
+
+    private shakeVine(r: number, c: number) {
+        const node = this.vineNodes[r][c];
+        if (node) {
+            Tween.stopAllByTarget(node);
+            tween(node)
+                .to(0.04, { scale: v3(0.9, 1.15, 1) })
+                .to(0.04, { scale: v3(1.15, 0.9, 1) })
+                .to(0.05, { scale: v3(1, 1, 1) })
+                .start();
+        }
+    }
+
+    /**
+     * 对命中的坐标位置执行破冰与解开荆棘藤蔓
+     */
+    private async hitObstaclesAtPositions(positions: { row: number; col: number }[]) {
+        const iceCracked: Node[] = [];
+        const iceDestroyed: Node[] = [];
+        const vineSnapped: Node[] = [];
+
+        const handled = new Set<string>();
+
+        for (const pos of positions) {
+            const key = `${pos.row}_${pos.col}`;
+            if (handled.has(key)) continue;
+            handled.add(key);
+
+            const r = pos.row, c = pos.col;
+            if (r < 0 || r >= GAME_CONFIG.ROWS || c < 0 || c >= GAME_CONFIG.COLS) continue;
+
+            // 1. 解开藤蔓
+            if (this.obstacleData[r][c].vine > 0) {
+                this.obstacleData[r][c].vine = 0;
+                const vn = this.vineNodes[r][c];
+                if (vn) {
+                    this.vineNodes[r][c] = null;
+                    vineSnapped.push(vn);
+                }
+                this.score += 150;
+            }
+
+            // 2. 击碎冰块
+            if (this.obstacleData[r][c].ice > 0) {
+                this.obstacleData[r][c].ice--;
+                const inode = this.iceNodes[r][c];
+                this.score += 200;
+
+                if (this.obstacleData[r][c].ice > 0) {
+                    // 变成薄冰
+                    if (inode) {
+                        const sp = inode.getComponent(Sprite);
+                        if (sp) sp.spriteFrame = ArtFactory.getIceSprite(this.obstacleData[r][c].ice);
+                        iceCracked.push(inode);
+                    }
+                } else {
+                    // 彻底破碎
+                    if (inode) {
+                        this.iceNodes[r][c] = null;
+                        iceDestroyed.push(inode);
+                    }
+                    this.totalIceCount--;
+                }
+            }
+        }
+
+        // 播放藤蔓断裂音效与动画
+        if (vineSnapped.length > 0) {
+            AudioService.playVineSnap();
+            vineSnapped.forEach(node => {
+                tween(node)
+                    .to(0.1, { scale: v3(1.3, 1.3, 1) })
+                    .to(0.12, { scale: v3(0, 0, 1) })
+                    .call(() => node.destroy())
+                    .start();
+            });
+        }
+
+        // 播放碎冰微震音效与动画
+        if (iceCracked.length > 0) {
+            AudioService.playIceCrack();
+            iceCracked.forEach(node => {
+                tween(node)
+                    .to(0.05, { scale: v3(0.92, 0.92, 1) })
+                    .to(0.08, { scale: v3(1, 1, 1) })
+                    .start();
+            });
+        }
+
+        // 播放完全碎裂音效与飞散动画
+        if (iceDestroyed.length > 0) {
+            AudioService.playIceCrack();
+            iceDestroyed.forEach(node => {
+                tween(node)
+                    .to(0.08, { scale: v3(1.25, 1.25, 1) })
+                    .to(0.12, { scale: v3(0, 0, 1) })
+                    .call(() => node.destroy())
+                    .start();
+            });
+        }
+
+        this.updateUI();
+
+        // 检查是否清空了全场所有冰块！
+        if (this.totalIceCount <= 0 && handled.size > 0 && positions.length > 0) {
+            this.showIceClearBonus();
+        }
+    }
+
+    /**
+     * 全部冰块清除奖励
+     */
+    private showIceClearBonus() {
+        this.score += 2500;
+        this.remainingMoves += 5;
+        this.updateUI();
+        AudioService.playWin();
+
+        this.bannerLabel.string = '❄️ 冰块全清！得分+2500 步数+5！';
+        Tween.stopAllByTarget(this.bannerNode);
+        this.bannerNode.setScale(0, 0, 1);
+        tween(this.bannerNode)
+            .to(0.18, { scale: v3(1.15, 1.15, 1) }, { easing: 'backOut' })
+            .delay(1.2)
+            .to(0.18, { scale: v3(0, 0, 1) }, { easing: 'backIn' })
+            .start();
+    }
+
+    /**
+     * 关卡无缝升级时为现有棋盘补充新一轮冰霜与荆棘
+     */
+    private addNewObstaclesForLevel(level: number) {
+        let addedIce = 0;
+        let addedVine = 0;
+
+        for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
+            for (let c = 0; c < GAME_CONFIG.COLS; c++) {
+                // 如果该格还没有冰块，且在特征区域，铺设新冰块
+                if (this.obstacleData[r][c].ice === 0 && (r <= 1 || r >= 6 || (r + c) % 3 === 0)) {
+                    if (addedIce < 8 + level * 2) {
+                        this.setIce(r, c, (level >= 3 && Math.random() > 0.4) ? 2 : 1);
+                        addedIce++;
+                    }
+                }
+                // 补充 2~3 处新藤蔓
+                if (this.obstacleData[r][c].vine === 0 && addedVine < Math.min(3, level) && Math.random() < 0.25) {
+                    this.setVine(r, c);
+                    addedVine++;
+                }
+            }
+        }
+    }
+
+    private showBannerMessage(msg: string) {
+        this.bannerLabel.string = msg;
+        Tween.stopAllByTarget(this.bannerNode);
+        this.bannerNode.setScale(0, 0, 1);
+        tween(this.bannerNode)
+            .to(0.12, { scale: v3(1.1, 1.1, 1) })
+            .delay(0.7)
+            .to(0.15, { scale: v3(0, 0, 1) })
+            .start();
+    }
+
     private updateUI() {
         if (this.titleLabel) this.titleLabel.string = `✨ 第 ${this.currentLevel} 关 · 开心消消乐 ✨`;
         if (this.movesLabel) this.movesLabel.string = `⚡ 步数: ${this.remainingMoves}`;
+        if (this.iceLabel) this.iceLabel.string = `❄️ 冰块: ${this.totalIceCount}`;
         if (this.scoreLabel) this.scoreLabel.string = `⭐ 得分: ${this.score} / ${this.targetScore}`;
     }
 
@@ -333,6 +623,13 @@ export class GameManager extends Component {
         const tile = this.getTileAtPos(localPos);
 
         if (tile) {
+            // 被藤蔓锁定的格子无法主动拖动
+            if (this.obstacleData[tile.row]?.[tile.col]?.vine > 0) {
+                AudioService.playLocked();
+                this.shakeVine(tile.row, tile.col);
+                this.showBannerMessage('荆棘缠绕，无法移动！');
+                return;
+            }
             this.touchStartPos = localPos;
             this.touchStartTile = tile;
             AudioService.playTap();
@@ -429,6 +726,17 @@ export class GameManager extends Component {
 
         const r1 = tile1.row, c1 = tile1.col;
         const r2 = tile2.row, c2 = tile2.col;
+
+        // 校验藤蔓锁定拦截
+        if (this.obstacleData[r1]?.[c1]?.vine > 0 || this.obstacleData[r2]?.[c2]?.vine > 0) {
+            AudioService.playLocked();
+            if (this.obstacleData[r1]?.[c1]?.vine > 0) this.shakeVine(r1, c1);
+            if (this.obstacleData[r2]?.[c2]?.vine > 0) this.shakeVine(r2, c2);
+            await Promise.all([tile1.shake(), tile2.shake()]);
+            this.showBannerMessage('荆棘缠绕，无法移动！');
+            this.isBusy = false;
+            return;
+        }
 
         // 1. 播放交换平滑位移动画
         await Promise.all([
@@ -590,6 +898,11 @@ export class GameManager extends Component {
         // 连锁扩散（如果有炸弹或条纹被卷入，继续引爆）
         const allToEliminate = MatchLogic.expandElimination(this.gridData, Array.from(toEliminate));
 
+        // 攻击命中的冰块与藤蔓
+        const hitPositions: { row: number; col: number }[] = [];
+        allToEliminate.forEach(t => hitPositions.push({ row: t.row, col: t.col }));
+        await this.hitObstaclesAtPositions(hitPositions);
+
         // 累积分数
         const addScore = allToEliminate.size * 100;
         this.score += addScore;
@@ -639,6 +952,11 @@ export class GameManager extends Component {
 
             // 连锁扩散（如果有条纹或炸弹）
             const allToEliminate = MatchLogic.expandElimination(this.gridData, matchedTiles);
+
+            // 攻击命中的冰块与藤蔓
+            const hitPositions: { row: number; col: number }[] = [];
+            allToEliminate.forEach(t => hitPositions.push({ row: t.row, col: t.col }));
+            await this.hitObstaclesAtPositions(hitPositions);
 
             // 执行消除动画并加分
             const baseScore = allToEliminate.size * 100 * this.currentCombo;
@@ -696,7 +1014,10 @@ export class GameManager extends Component {
      * 重力下落与新块生成
      */
     private async dropAndFill() {
-        const { drops, newTiles } = MatchLogic.calculateDrop(this.gridData);
+        const { drops, newTiles } = MatchLogic.calculateDrop(
+            this.gridData,
+            (r, c) => this.obstacleData[r]?.[c]?.vine > 0
+        );
         const anims: Promise<void>[] = [];
 
         // 1. 创建新生节点的视图
@@ -758,6 +1079,8 @@ export class GameManager extends Component {
             this.remainingMoves += bonusMoves;
             AudioService.playWin();
             this.showLevelUpBanner(this.currentLevel, bonusMoves);
+            // 为新关卡在当前地图无缝补充新一轮冰霜与荆棘挑战
+            this.addNewObstaclesForLevel(this.currentLevel);
             this.updateUI();
         }
 
