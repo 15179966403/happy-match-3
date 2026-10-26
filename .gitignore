@@ -1,0 +1,18 @@
+# Cocos Creator 3.x
+library/
+temp/
+local/
+build/
+profiles/
+native/
+.creator/
+
+# NPM
+node_modules/
+
+# Editors
+.vscode/
+.idea/
+*.log
+.DS_Store
+Thumbs.db
