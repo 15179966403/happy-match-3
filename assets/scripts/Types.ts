@@ -45,6 +45,6 @@ export const GAME_CONFIG = {
     TILE_SIZE: 72,
     TILE_GAP: 4,
     ANIMAL_COUNT: 5, // 常用 5 种动物，手感与连击率最舒适
-    MAX_MOVES: 25,
+    MAX_MOVES: 35, // 充裕初始步数，方便长时间畅玩与测试
     TARGET_SCORE: 6000,
 };

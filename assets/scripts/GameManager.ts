@@ -14,13 +14,16 @@ export class GameManager extends Component {
     private gridData: (TileData | null)[][] = [];
 
     // UI 组件
+    private titleLabel: Label = null!;
     private scoreLabel: Label = null!;
     private movesLabel: Label = null!;
     private bannerNode: Node = null!;
     private bannerLabel: Label = null!;
     private modalNode: Node = null!;
 
-    // 游戏数值
+    // 游戏数值与连续无尽闯关
+    private currentLevel: number = 1;
+    private targetScore: number = GAME_CONFIG.TARGET_SCORE;
     private score: number = 0;
     private remainingMoves: number = GAME_CONFIG.MAX_MOVES;
     private isBusy: boolean = false;
@@ -107,12 +110,12 @@ export class GameManager extends Component {
         titleG.stroke();
 
         const titleTextNode = this.createUINode('TitleText', 460, 60);
-        const titleLabel = titleTextNode.addComponent(Label);
-        titleLabel.string = '✨ 开心消消乐 ✨';
-        titleLabel.fontSize = 36;
-        titleLabel.lineHeight = 38;
-        titleLabel.color = new Color(75, 45, 30);
-        titleLabel.isBold = true;
+        this.titleLabel = titleTextNode.addComponent(Label);
+        this.titleLabel.string = `✨ 第 ${this.currentLevel} 关 · 开心消消乐 ✨`;
+        this.titleLabel.fontSize = 34;
+        this.titleLabel.lineHeight = 36;
+        this.titleLabel.color = new Color(75, 45, 30);
+        this.titleLabel.isBold = true;
         titleNode.addChild(titleTextNode);
         this.node.addChild(titleNode);
 
@@ -248,21 +251,21 @@ export class GameManager extends Component {
         this.boardContainer.on(Node.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
         // 6. 浮动连击/赞美飘字节点 (Combo Banner)
-        this.bannerNode = this.createUINode('BannerNode', 340, 80);
+        this.bannerNode = this.createUINode('BannerNode', 440, 84);
         this.bannerNode.setPosition(0, 75, 0);
         this.bannerNode.setScale(0, 0, 1);
 
         const bannerG = this.bannerNode.addComponent(Graphics);
         bannerG.fillColor = new Color(255, 75, 95);
-        bannerG.roundRect(-160, -38, 320, 76, 24);
+        bannerG.roundRect(-210, -40, 420, 80, 24);
         bannerG.fill();
         bannerG.strokeColor = new Color(255, 225, 90);
         bannerG.lineWidth = 4;
         bannerG.stroke();
 
-        const bannerTextNode = this.createUINode('BannerText', 300, 60);
+        const bannerTextNode = this.createUINode('BannerText', 400, 60);
         this.bannerLabel = bannerTextNode.addComponent(Label);
-        this.bannerLabel.fontSize = 32;
+        this.bannerLabel.fontSize = 28;
         this.bannerLabel.color = Color.WHITE;
         this.bannerLabel.isBold = true;
         this.bannerNode.addChild(bannerTextNode);
@@ -278,10 +281,12 @@ export class GameManager extends Component {
      * 开启新一局游戏
      */
     public startNewGame() {
-        this.isGameOver = false;
+        this.currentLevel = 1;
+        this.targetScore = GAME_CONFIG.TARGET_SCORE;
         this.score = 0;
         this.remainingMoves = GAME_CONFIG.MAX_MOVES;
         this.currentCombo = 0;
+        this.isGameOver = false;
         this.modalNode.active = false;
         this.updateUI();
 
@@ -312,8 +317,9 @@ export class GameManager extends Component {
     }
 
     private updateUI() {
+        if (this.titleLabel) this.titleLabel.string = `✨ 第 ${this.currentLevel} 关 · 开心消消乐 ✨`;
         if (this.movesLabel) this.movesLabel.string = `⚡ 步数: ${this.remainingMoves}`;
-        if (this.scoreLabel) this.scoreLabel.string = `⭐ 得分: ${this.score} / ${GAME_CONFIG.TARGET_SCORE}`;
+        if (this.scoreLabel) this.scoreLabel.string = `⭐ 得分: ${this.score} / ${this.targetScore}`;
     }
 
     // ==================== 触摸与滑动手势交互 ====================
@@ -741,21 +747,24 @@ export class GameManager extends Component {
     }
 
     /**
-     * 胜负判定与防死局洗牌检测
+     * 胜负判定与防死局洗牌检测 (无缝连续闯关，绝不刷新地图)
      */
     private checkGameStatus() {
-        // 胜利达成目标
-        if (this.score >= GAME_CONFIG.TARGET_SCORE) {
-            this.isGameOver = true;
+        // 达成关卡目标：无缝进入下一关，奖励步数，绝不刷新地图！
+        if (this.score >= this.targetScore) {
+            this.currentLevel++;
+            this.targetScore += 6000;
+            const bonusMoves = 15;
+            this.remainingMoves += bonusMoves;
             AudioService.playWin();
-            this.showEndModal(true, '🎉 恭喜通关！', `最终得分: ${this.score}\n太棒了，完美通关！`);
-            return;
+            this.showLevelUpBanner(this.currentLevel, bonusMoves);
+            this.updateUI();
         }
 
-        // 步数耗尽失败
+        // 步数耗尽检测
         if (this.remainingMoves <= 0) {
             this.isGameOver = true;
-            this.showEndModal(false, '💔 步数用尽', `当前得分: ${this.score}\n离目标还差一点点，再来一次吧！`);
+            this.showEndModal(false, '💔 步数用尽', `当前已冲刺到第 ${this.currentLevel} 关\n累计得分: ${this.score}`);
             return;
         }
 
@@ -763,6 +772,21 @@ export class GameManager extends Component {
         if (!MatchLogic.hasValidMove(this.gridData)) {
             this.showShuffleNotice();
         }
+    }
+
+    /**
+     * 弹出关卡升级飘字横幅 (轻量提示，不打断手指操作)
+     */
+    private showLevelUpBanner(level: number, bonusMoves: number) {
+        this.bannerLabel.string = `🎉 第 ${level} 关达成！步数 +${bonusMoves}！`;
+        Tween.stopAllByTarget(this.bannerNode);
+        this.bannerNode.setScale(0, 0, 1);
+
+        tween(this.bannerNode)
+            .to(0.18, { scale: v3(1.15, 1.15, 1) }, { easing: 'backOut' })
+            .delay(1.2)
+            .to(0.18, { scale: v3(0, 0, 1) }, { easing: 'backIn' })
+            .start();
     }
 
     /**
@@ -787,7 +811,7 @@ export class GameManager extends Component {
     }
 
     /**
-     * 结算模态弹窗
+     * 结算模态弹窗 (支持保留当前棋盘加步继续玩)
      */
     private showEndModal(isWin: boolean, title: string, desc: string) {
         this.modalNode.removeAllChildren();
@@ -796,16 +820,16 @@ export class GameManager extends Component {
         // 半透明遮罩
         const mask = this.createUINode('Mask', 750, 1334);
         const maskG = mask.addComponent(Graphics);
-        maskG.fillColor = new Color(0, 0, 0, 150);
+        maskG.fillColor = new Color(0, 0, 0, 160);
         maskG.rect(-375, -667, 750, 1334);
         maskG.fill();
         this.modalNode.addChild(mask);
 
         // 对话框面板
-        const panel = this.createUINode('Panel', 500, 360);
+        const panel = this.createUINode('Panel', 520, 380);
         const panelG = panel.addComponent(Graphics);
         panelG.fillColor = Color.WHITE;
-        panelG.roundRect(-250, -180, 500, 360, 28);
+        panelG.roundRect(-260, -190, 520, 380, 28);
         panelG.fill();
 
         panelG.strokeColor = isWin ? new Color(255, 205, 50) : new Color(200, 215, 230);
@@ -813,8 +837,8 @@ export class GameManager extends Component {
         panelG.stroke();
 
         // 标题
-        const titleN = this.createUINode('Title', 440, 50);
-        titleN.setPosition(0, 95, 0);
+        const titleN = this.createUINode('Title', 460, 50);
+        titleN.setPosition(0, 105, 0);
         const titleL = titleN.addComponent(Label);
         titleL.string = title;
         titleL.fontSize = 36;
@@ -823,8 +847,8 @@ export class GameManager extends Component {
         panel.addChild(titleN);
 
         // 描述
-        const descN = this.createUINode('Desc', 440, 90);
-        descN.setPosition(0, 15, 0);
+        const descN = this.createUINode('Desc', 460, 90);
+        descN.setPosition(0, 35, 0);
         const descL = descN.addComponent(Label);
         descL.string = desc;
         descL.fontSize = 24;
@@ -832,27 +856,51 @@ export class GameManager extends Component {
         descL.color = new Color(80, 80, 80);
         panel.addChild(descN);
 
-        // 重新开始按钮
-        const btnNode = this.createUINode('RestartBtn', 260, 68);
-        btnNode.setPosition(0, -95, 0);
-        const btnG = btnNode.addComponent(Graphics);
-        btnG.fillColor = isWin ? new Color(46, 204, 113) : new Color(52, 152, 219);
-        btnG.roundRect(-130, -34, 260, 68, 20);
-        btnG.fill();
+        // 按钮 1：补充 +10 步继续玩 (保留现有地图不刷新)
+        const addMovesBtn = this.createUINode('AddMovesBtn', 220, 64);
+        addMovesBtn.setPosition(-120, -85, 0);
+        const btnG1 = addMovesBtn.addComponent(Graphics);
+        btnG1.fillColor = new Color(46, 204, 113);
+        btnG1.roundRect(-110, -32, 220, 64, 18);
+        btnG1.fill();
 
-        const btnText = this.createUINode('BtnText', 220, 40);
-        const btnL = btnText.addComponent(Label);
-        btnL.string = isWin ? '下一关' : '再试一次';
-        btnL.fontSize = 28;
-        btnL.color = Color.WHITE;
-        btnL.isBold = true;
-        btnNode.addChild(btnText);
+        const text1 = this.createUINode('BtnText1', 200, 40);
+        const l1 = text1.addComponent(Label);
+        l1.string = '⚡ +10步继续';
+        l1.fontSize = 24;
+        l1.color = Color.WHITE;
+        l1.isBold = true;
+        addMovesBtn.addChild(text1);
 
-        btnNode.on(Node.EventType.TOUCH_END, () => {
+        addMovesBtn.on(Node.EventType.TOUCH_END, () => {
+            this.remainingMoves += 10;
+            this.isGameOver = false;
+            this.modalNode.active = false;
+            this.updateUI();
+        });
+        panel.addChild(addMovesBtn);
+
+        // 按钮 2：重新开新局 (重置地图)
+        const restartBtn = this.createUINode('RestartBtn', 200, 64);
+        restartBtn.setPosition(130, -85, 0);
+        const btnG2 = restartBtn.addComponent(Graphics);
+        btnG2.fillColor = new Color(52, 152, 219);
+        btnG2.roundRect(-100, -32, 200, 64, 18);
+        btnG2.fill();
+
+        const text2 = this.createUINode('BtnText2', 180, 40);
+        const l2 = text2.addComponent(Label);
+        l2.string = '🔄 重开新局';
+        l2.fontSize = 24;
+        l2.color = Color.WHITE;
+        l2.isBold = true;
+        restartBtn.addChild(text2);
+
+        restartBtn.on(Node.EventType.TOUCH_END, () => {
             this.startNewGame();
         });
+        panel.addChild(restartBtn);
 
-        panel.addChild(btnNode);
         this.modalNode.addChild(panel);
 
         // 弹窗弹出动画
