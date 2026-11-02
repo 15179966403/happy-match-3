@@ -27,6 +27,8 @@
 2. 打开 `assets/scene.scene`。
 3. 点击编辑器顶部的运行预览按钮，推荐使用浏览器预览。
 
+规则回归测试运行 `npm install`、`npm test`。关卡启动时控制台会输出随机种子；开发时可用 `GameManager.startLevel(关卡号, 种子)` 复现同一棋盘、补块和洗牌序列。
+
 ## 主要代码
 
 - `assets/scripts/GameManager.ts`：界面、棋盘、交互、消除和视觉反馈。

@@ -2,6 +2,22 @@ import { AnimalType, SpecialType, TileData, MatchGroup, DropItem, GAME_CONFIG } 
 
 export class MatchLogic {
     private static nextId: number = 1;
+    private static randomState: number = 1;
+
+    /** 设置可复现的棋盘随机种子；同一种子与操作序列会得到相同的补块和洗牌。 */
+    public static setSeed(seed: number): void {
+        this.randomState = seed >>> 0;
+        this.nextId = 1;
+    }
+
+    private static random(): number {
+        this.randomState = (Math.imul(this.randomState, 1664525) + 1013904223) >>> 0;
+        return this.randomState / 0x100000000;
+    }
+
+    public static createSpecialTile(row: number, col: number, type: AnimalType, special: SpecialType): TileData {
+        return { id: this.nextId++, type, special, row, col };
+    }
 
     /**
      * 创建一个空棋盘
@@ -27,7 +43,7 @@ export class MatchLogic {
                 available.push(i);
             }
         }
-        const picked = available[Math.floor(Math.random() * available.length)];
+        const picked = available[Math.floor(this.random() * available.length)];
         return {
             id: this.nextId++,
             type: picked,
@@ -296,46 +312,41 @@ export class MatchLogic {
         const newTiles: TileData[] = [];
 
         for (let c = 0; c < cols; c++) {
-            let emptyCount = 0;
-            // 从底部向上扫描
-            for (let r = 0; r < rows; r++) {
-                if (grid[r][c] === null) {
-                    emptyCount++;
-                } else if (isLocked && isLocked(r, c)) {
-                    // 该格被藤蔓锁定，不能下落，上方重力在藤蔓头顶重新累计
-                    emptyCount = 0;
-                } else if (emptyCount > 0) {
-                    // 下移
-                    const tile = grid[r][c]!;
-                    const targetRow = r - emptyCount;
-                    grid[targetRow][c] = tile;
+            // 藤蔓格是固定边界。各段独立下落和补块，不能丢掉边界下方的空位。
+            const settleSegment = (bottom: number, top: number) => {
+                if (bottom > top) return;
+                const existing: { tile: TileData; fromRow: number }[] = [];
+                for (let r = bottom; r <= top; r++) {
+                    const tile = grid[r][c];
+                    if (tile) existing.push({ tile, fromRow: r });
                     grid[r][c] = null;
+                }
+                existing.forEach(({ tile, fromRow }, index) => {
+                    const toRow = bottom + index;
+                    grid[toRow][c] = tile;
+                    tile.row = toRow;
+                    if (fromRow !== toRow) drops.push({
+                        fromRow, fromCol: c, toRow, toCol: c, tile, isNew: false
+                    });
+                });
+                const emptyCount = top - bottom + 1 - existing.length;
+                for (let i = 0; i < emptyCount; i++) {
+                    const toRow = bottom + existing.length + i;
+                    const tile = this.createRandomTile(toRow, c);
+                    grid[toRow][c] = tile;
+                    newTiles.push(tile);
                     drops.push({
-                        fromRow: r,
-                        fromCol: c,
-                        toRow: targetRow,
-                        toCol: c,
-                        tile,
-                        isNew: false
+                        fromRow: top + 1 + i, fromCol: c,
+                        toRow, toCol: c, tile, isNew: true
                     });
                 }
-            }
-
-            // 顶部补齐新生元素
-            for (let i = 0; i < emptyCount; i++) {
-                const targetRow = rows - emptyCount + i;
-                const spawnRow = rows + i; // 在棋盘顶部外方生成并坠入
-                const newTile = this.createRandomTile(targetRow, c);
-                grid[targetRow][c] = newTile;
-                newTiles.push(newTile);
-                drops.push({
-                    fromRow: spawnRow,
-                    fromCol: c,
-                    toRow: targetRow,
-                    toCol: c,
-                    tile: newTile,
-                    isNew: true
-                });
+            };
+            let bottom = 0;
+            for (let r = 0; r <= rows; r++) {
+                if (r === rows || (isLocked && isLocked(r, c))) {
+                    settleSegment(bottom, r - 1);
+                    bottom = r + 1;
+                }
             }
         }
 
@@ -362,7 +373,7 @@ export class MatchLogic {
         do {
             // 洗牌 Fisher-Yates
             for (let i = tiles.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(this.random() * (i + 1));
                 const temp = tiles[i];
                 tiles[i] = tiles[j];
                 tiles[j] = temp;

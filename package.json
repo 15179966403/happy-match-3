@@ -1,6 +1,12 @@
 {
-  "name": "NewProject",
+  "name": "happy-match-3",
   "uuid": "66f1ee69-8f22-4007-9c8d-e5e7ca516b87",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
   "creator": {
     "version": "3.8.8"
   }

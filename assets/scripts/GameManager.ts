@@ -260,8 +260,11 @@ export class GameManager extends Component {
         this.startLevel(1);
     }
 
-    private startLevel(level: number) {
+    /** 可指定 seed 复现棋盘；重试仍创建新局。 */
+    public startLevel(level: number, seed: number = Date.now()) {
         this.currentLevel = level;
+        MatchLogic.setSeed(seed);
+        console.info(`[Happy Match-3] level=${level} seed=${seed >>> 0}`);
         this.levelConfig = getLevel(level);
         this.levelState = createLevelState(this.levelConfig);
         this.pendingGoalProgress = 0;
@@ -988,13 +991,8 @@ export class GameManager extends Component {
                 const c = sp.pos.col;
                 // 如果该位置已被消除置空，重新生成特殊图块
                 if (this.gridData[r][c] === null) {
-                    const spData: TileData = {
-                        id: Date.now() + Math.random(),
-                        type: sp.special === SpecialType.RAINBOW ? AnimalType.CHICKEN : sp.type,
-                        special: sp.special,
-                        row: r,
-                        col: c
-                    };
+                    const spData = MatchLogic.createSpecialTile(r, c,
+                        sp.special === SpecialType.RAINBOW ? AnimalType.CHICKEN : sp.type, sp.special);
                     this.gridData[r][c] = spData;
                     const node = this.createUINode(`Special_${r}_${c}`, GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE);
                     const item = node.addComponent(TileItem);
@@ -1054,8 +1052,8 @@ export class GameManager extends Component {
 
                 // 初始位置在棋盘外顶部
                 const spawnPos = TileItem.getPos(drop.fromRow, drop.fromCol);
-                node.setPosition(spawnPos);
                 item.init(drop.tile);
+                node.setPosition(spawnPos);
 
                 this.tileItems[drop.toRow][drop.toCol] = item;
                 anims.push(item.moveTo(drop.toRow, drop.toCol, 0.28, true));
