@@ -341,62 +341,163 @@ export class TileRenderer {
     }
 
     /**
-     * 横向条纹特效光带
+     * 🚀 横向条纹穿梭火箭光翼与立体晶体激光光棱箭头 (Horizontal Aero Rocket)
      */
     private static drawHorizontalStripes(g: Graphics, half: number) {
-        g.fillColor = new Color(255, 255, 255, 180);
-        g.rect(-half + 4, -4, (half - 4) * 2, 8);
+        // 1. 腰腹部柔和极光流带 (避免遮挡可爱面部五官)
+        const beltY = -half * 0.35;
+        g.fillColor = new Color(0, 210, 255, 120);
+        g.roundRect(-half + 6, beltY - 4, (half - 6) * 2, 8, 4);
         g.fill();
 
-        // 左右白色发光小箭头
-        g.fillColor = new Color(255, 255, 255, 230);
-        g.moveTo(-half + 5, 0);
-        g.lineTo(-half + 11, 5);
-        g.lineTo(-half + 11, -5);
-        g.close();
+        g.fillColor = new Color(255, 255, 255, 200);
+        g.roundRect(-half * 0.6, beltY - 2, half * 1.2, 4, 2);
         g.fill();
 
-        g.moveTo(half - 5, 0);
-        g.lineTo(half - 11, 5);
-        g.lineTo(half - 11, -5);
-        g.close();
-        g.fill();
+        // 2. 左右对称的高能火箭喷气舱与立体晶体激光箭头
+        // 左推进火箭 (朝左)
+        this.drawRocketPod(g, -half + 8, beltY, -1);
+        // 右推进火箭 (朝右)
+        this.drawRocketPod(g, half - 8, beltY, 1);
+
+        // 3. 中心能量晶核
+        this.drawStar(g, 0, beltY, 4, 6, 2.5, new Color(255, 255, 255));
     }
 
     /**
-     * 纵向条纹特效光带
+     * 🚀 纵向冲天火箭光锥与上下立体晶体激光光棱箭头 (Vertical Aero Rocket)
      */
     private static drawVerticalStripes(g: Graphics, half: number) {
-        g.fillColor = new Color(255, 255, 255, 180);
-        g.rect(-4, -half + 4, 8, (half - 4) * 2);
+        // 1. 纵向贯穿极光流束
+        g.fillColor = new Color(0, 210, 255, 120);
+        g.roundRect(-4, -half + 6, 8, (half - 6) * 2, 4);
         g.fill();
 
-        // 上下白色发光小箭头
-        g.fillColor = new Color(255, 255, 255, 230);
-        g.moveTo(0, half - 5);
-        g.lineTo(5, half - 11);
-        g.lineTo(-5, half - 11);
-        g.close();
+        g.fillColor = new Color(255, 255, 255, 200);
+        g.roundRect(-2, -half * 0.6, 4, half * 1.2, 2);
         g.fill();
 
-        g.moveTo(0, -half + 5);
-        g.lineTo(5, -half + 11);
-        g.lineTo(-5, -half + 11);
-        g.close();
-        g.fill();
+        // 2. 上下对称的冲天火箭发射舱与立体激光箭头
+        // 顶部冲天 (朝上)
+        this.drawVerticalRocketPod(g, 0, half - 8, 1);
+        // 底部反冲 (朝下)
+        this.drawVerticalRocketPod(g, 0, -half + 8, -1);
+
+        // 3. 中心能量晶核
+        this.drawStar(g, 0, 0, 4, 6, 2.5, new Color(255, 255, 255));
     }
 
     /**
-     * 炸弹范围包裹光环
+     * 绘制横向火箭推进舱与激光箭头
+     */
+    private static drawRocketPod(g: Graphics, x: number, y: number, dir: number) {
+        // 推进尾焰 (向内)
+        g.fillColor = new Color(255, 160, 40, 220);
+        g.moveTo(x, y - 3);
+        g.lineTo(x - 8 * dir, y);
+        g.lineTo(x, y + 3);
+        g.close();
+        g.fill();
+
+        // 立体激光能量箭头 (朝外)
+        const tipX = x + 12 * dir;
+        const baseX = x + 2 * dir;
+        const arrowH = 7;
+
+        // 箭头外层青蓝发光底
+        g.fillColor = new Color(0, 210, 255, 255);
+        g.moveTo(tipX, y);
+        g.lineTo(baseX, y + arrowH);
+        g.lineTo(baseX + 2 * dir, y);
+        g.lineTo(baseX, y - arrowH);
+        g.close();
+        g.fill();
+
+        // 箭头高光上切面
+        g.fillColor = new Color(255, 255, 255, 240);
+        g.moveTo(tipX, y);
+        g.lineTo(baseX, y - arrowH);
+        g.lineTo(baseX + 2 * dir, y);
+        g.close();
+        g.fill();
+
+        // 尖端钻石星芒
+        this.drawStar(g, tipX, y, 4, 4.5, 1.8, new Color(255, 255, 255));
+    }
+
+    /**
+     * 绘制纵向冲天火箭推进舱与激光箭头
+     */
+    private static drawVerticalRocketPod(g: Graphics, x: number, y: number, dir: number) {
+        // 推进尾焰 (向内)
+        g.fillColor = new Color(255, 160, 40, 220);
+        g.moveTo(x - 3, y);
+        g.lineTo(x, y - 8 * dir);
+        g.lineTo(x + 3, y);
+        g.close();
+        g.fill();
+
+        // 立体激光能量箭头 (朝外)
+        const tipY = y + 12 * dir;
+        const baseY = y + 2 * dir;
+        const arrowW = 7;
+
+        g.fillColor = new Color(0, 210, 255, 255);
+        g.moveTo(x, tipY);
+        g.lineTo(x + arrowW, baseY);
+        g.lineTo(x, baseY + 2 * dir);
+        g.lineTo(x - arrowW, baseY);
+        g.close();
+        g.fill();
+
+        // 高光左切面
+        g.fillColor = new Color(255, 255, 255, 240);
+        g.moveTo(x, tipY);
+        g.lineTo(x - arrowW, baseY);
+        g.lineTo(x, baseY + 2 * dir);
+        g.close();
+        g.fill();
+
+        // 尖端钻石星芒
+        this.drawStar(g, x, tipY, 4, 4.5, 1.8, new Color(255, 255, 255));
+    }
+
+    /**
+     * 💣 炸弹范围包裹护盾 (烈焰能量波与火花引线)
      */
     private static drawBombAura(g: Graphics, half: number) {
-        // 闪耀光环边框
-        g.strokeColor = new Color(255, 230, 60, 220);
-        g.lineWidth = 3.5;
-        g.roundRect(-half + 1, -half + 1, half * 2 - 2, half * 2 - 2, 16);
+        // 1. 烈焰冲击波外环
+        g.strokeColor = new Color(255, 100, 50, 200);
+        g.lineWidth = 3;
+        g.roundRect(-half + 1, -half + 1, half * 2 - 2, half * 2 - 2, 18);
         g.stroke();
 
-        // 右上角点缀闪烁小火花
-        this.drawStar(g, half - 6, half - 6, 4, 6, 2.5, new Color(255, 80, 20));
+        // 2. 内部金光能量环
+        g.strokeColor = new Color(255, 215, 0, 240);
+        g.lineWidth = 2.5;
+        g.roundRect(-half + 4, -half + 4, half * 2 - 8, half * 2 - 8, 14);
+        g.stroke();
+
+        // 3. 四角爆裂小火球
+        const corners = [
+            [-half + 6, half - 6],
+            [half - 6, half - 6],
+            [-half + 6, -half + 6],
+            [half - 6, -half + 6]
+        ];
+        for (const [cx, cy] of corners) {
+            g.fillColor = new Color(255, 80, 20);
+            g.circle(cx, cy, 3);
+            g.fill();
+        }
+
+        // 4. 右上角卷曲引线与火花星芒
+        g.strokeColor = new Color(100, 110, 120);
+        g.lineWidth = 2;
+        g.moveTo(half - 12, half - 12);
+        g.lineTo(half - 4, half - 4);
+        g.stroke();
+
+        this.drawStar(g, half - 3, half - 3, 4, 6, 2.5, new Color(255, 240, 100));
     }
 }

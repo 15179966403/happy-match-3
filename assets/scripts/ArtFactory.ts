@@ -1,5 +1,6 @@
 import { ImageAsset, Texture2D, SpriteFrame } from 'cc';
 import { AnimalType, SpecialType } from './Types';
+import { SpecialTileAssets } from './SpecialTileAssets';
 
 /**
  * 工业级 Q 弹果冻糖果萌宠艺术工坊 (ArtFactory)
@@ -17,6 +18,9 @@ export class ArtFactory {
         if (this.cache.has(key)) {
             return this.cache.get(key)!;
         }
+
+        // 初始化/预热 AI 生图特殊格子素材
+        SpecialTileAssets.init();
 
         const size = 256; // 视网膜级超高采样率
         const canvas = document.createElement('canvas');
@@ -598,54 +602,78 @@ export class ArtFactory {
     }
 
     /**
-     * 🌈 七彩神圣魔力鸟 (极光流转宝石风)
+     * 🌈 大师级七彩极光魔力鸟 / 梦幻星辰水晶球 (Rainbow Disco Magic Bird)
+     * 七彩旋转光谱、金色天使萌羽小翅膀、星空水晶倒影与超立体八角璀璨金星
      */
     private static drawRainbowBird(ctx: CanvasRenderingContext2D, size: number) {
         const cx = size / 2;
         const cy = size / 2;
         const r = size * 0.42;
 
-        // 外层极光流彩圆盘
         ctx.save();
-        ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
+
+        // 1. 尝试叠加 AI 生成的超清水晶彩虹星辰球贴图
+        const aiImg = SpecialTileAssets.getImage('RAINBOW');
+        if (aiImg) {
+            ctx.drawImage(aiImg, 0, 0, size, size);
+            ctx.restore();
+            return;
+        }
+
+        // 2. 左右两侧舒展展开的半透明金色天使萌羽翅膀 (Angel Wings)
+        this.drawAngelWing(ctx, cx - r * 0.55, cy, true, size);
+        this.drawAngelWing(ctx, cx + r * 0.55, cy, false, size);
+
+        // 3. 外层七彩光谱旋转极光圆盘 (Conic Rainbow Spectrum)
+        ctx.shadowColor = 'rgba(255, 215, 0, 0.75)';
         ctx.shadowBlur = 24;
 
-        // 极光渐变背景
         const grad = ctx.createConicGradient ? ctx.createConicGradient(0, cx, cy) : ctx.createRadialGradient(cx, cy, 10, cx, cy, r);
         if ('addColorStop' in grad) {
             grad.addColorStop(0.0, '#ff4757');
-            grad.addColorStop(0.2, '#ffa502');
-            grad.addColorStop(0.4, '#2ed573');
-            grad.addColorStop(0.6, '#1e90ff');
-            grad.addColorStop(0.8, '#9b59b6');
+            grad.addColorStop(0.18, '#ffa502');
+            grad.addColorStop(0.36, '#2ed573');
+            grad.addColorStop(0.54, '#1e90ff');
+            grad.addColorStop(0.72, '#9b59b6');
+            grad.addColorStop(0.88, '#ff4757');
             grad.addColorStop(1.0, '#ff4757');
         }
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
-        ctx.restore();
 
-        // 内部深邃星空水晶球
+        // 4. 金色华丽流光外圈描边
+        ctx.strokeStyle = '#ffd32a';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // 5. 内部深邃星空水晶球
         ctx.save();
         ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.78, 0, Math.PI * 2);
-        const innerGrad = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, 5, cx, cy, r * 0.8);
+        ctx.arc(cx, cy, r * 0.76, 0, Math.PI * 2);
+        const innerGrad = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, 4, cx, cy, r * 0.78);
         innerGrad.addColorStop(0, '#576574');
-        innerGrad.addColorStop(0.6, '#222f3e');
+        innerGrad.addColorStop(0.65, '#222f3e');
         innerGrad.addColorStop(1, '#0a101d');
         ctx.fillStyle = innerGrad;
         ctx.fill();
 
-        // 水晶反光
+        // 水晶球弧面月牙高光
         ctx.beginPath();
-        ctx.ellipse(cx, cy - r * 0.35, r * 0.45, r * 0.22, -0.1, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy - r * 0.35, r * 0.44, r * 0.22, -0.08, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
         ctx.fill();
         ctx.restore();
 
-        // 中心超华丽立体四角星芒
-        this.drawGoldStar(ctx, cx, cy, 4, r * 0.62, r * 0.22);
+        // 6. 中心超华丽立体八角闪耀金星 (3D Faceted Octagram Star)
+        this.drawFacetedStar(ctx, cx, cy, r * 0.62, r * 0.22);
+
+        // 7. 外围漂浮闪烁的彩虹星屑
+        this.drawRadiantStar(ctx, cx - r * 0.65, cy - r * 0.6, 4, 8, 3, '#ffd32a');
+        this.drawRadiantStar(ctx, cx + r * 0.65, cy + r * 0.6, 4, 7, 2.5, '#70a1ff');
+
+        ctx.restore();
     }
 
     // ==================== 辅助精细图形 ====================
@@ -723,56 +751,99 @@ export class ArtFactory {
         ctx.restore();
     }
 
-    // ==================== 特效光束与光环 ====================
+    // ==================== 大师级炫彩特效光束与能量护盾 ====================
 
     /**
-     * 横向条纹穿透光柱
+     * 🚀 大师级横向穿梭火箭光翼与立体晶体激光光棱箭头 (Horizontal Aero Rocket)
+     * 彻底告别粗暴白带与单纯箭头，为萌宠装备高科技Q弹双向火箭推进背包
      */
     private static drawHorizontalBeam(ctx: CanvasRenderingContext2D, size: number) {
+        const cx = size / 2;
         const cy = size / 2;
+        const half = size / 2;
+
         ctx.save();
-        ctx.shadowColor = '#00d2d3';
-        ctx.shadowBlur = 12;
 
-        // 贯穿发光能量带
-        const beam = ctx.createLinearGradient(0, cy - 14, 0, cy + 14);
-        beam.addColorStop(0, 'rgba(255, 255, 255, 0)');
-        beam.addColorStop(0.5, 'rgba(255, 255, 255, 0.95)');
-        beam.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = beam;
-        ctx.fillRect(8, cy - 14, size - 16, 28);
+        // 1. 尝试叠加 AI 生成的超清水晶横向火箭贴图
+        const aiImg = SpecialTileAssets.getImage('HORIZONTAL');
+        if (aiImg) {
+            ctx.drawImage(aiImg, 0, 0, size, size);
+        }
 
-        // 左右两端发射小光标
-        ctx.fillStyle = '#ffffff';
-        this.drawArrow(ctx, 24, cy, 14, -1);
-        this.drawArrow(ctx, size - 24, cy, 14, 1);
+        // 2. 腰间极光悬浮能量带 (轻盈透明，位于动物腰腹部，不遮挡可爱面部表情)
+        const beltY = cy + size * 0.16;
+        const beltH = 14;
+        const beltGrad = ctx.createLinearGradient(cx - half * 0.75, beltY, cx + half * 0.75, beltY);
+        beltGrad.addColorStop(0, 'rgba(0, 210, 255, 0)');
+        beltGrad.addColorStop(0.2, 'rgba(0, 242, 254, 0.45)');
+        beltGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+        beltGrad.addColorStop(0.8, 'rgba(0, 242, 254, 0.45)');
+        beltGrad.addColorStop(1, 'rgba(0, 210, 255, 0)');
+        ctx.fillStyle = beltGrad;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(cx - half * 0.75, beltY - beltH / 2, half * 1.5, beltH, beltH / 2);
+        } else {
+            ctx.rect(cx - half * 0.75, beltY - beltH / 2, half * 1.5, beltH);
+        }
+        ctx.fill();
+
+        // 3. 左右两侧对称的流体力学萌系火箭推进发射舱与晶石激光能量箭头
+        this.drawRocketPod(ctx, cx - half * 0.62, beltY, -1, size);
+        this.drawRocketPod(ctx, cx + half * 0.62, beltY, 1, size);
+
+        // 4. 腰间中心镶嵌一颗发光能量水晶核心
+        this.drawEnergyCoreGem(ctx, cx, beltY, 11);
+
         ctx.restore();
     }
 
     /**
-     * 纵向条纹穿透光柱
+     * 🚀 大师级纵向冲天火箭光锥与上下立体晶体激光光棱箭头 (Vertical Aero Rocket)
      */
     private static drawVerticalBeam(ctx: CanvasRenderingContext2D, size: number) {
         const cx = size / 2;
+        const cy = size / 2;
+        const half = size / 2;
+
         ctx.save();
-        ctx.shadowColor = '#00d2d3';
-        ctx.shadowBlur = 12;
 
-        const beam = ctx.createLinearGradient(cx - 14, 0, cx + 14, 0);
-        beam.addColorStop(0, 'rgba(255, 255, 255, 0)');
-        beam.addColorStop(0.5, 'rgba(255, 255, 255, 0.95)');
-        beam.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = beam;
-        ctx.fillRect(cx - 14, 8, 28, size - 16);
+        // 1. 尝试叠加 AI 生成的超清水晶纵向火箭贴图
+        const aiImg = SpecialTileAssets.getImage('VERTICAL');
+        if (aiImg) {
+            ctx.drawImage(aiImg, 0, 0, size, size);
+        }
 
-        ctx.fillStyle = '#ffffff';
-        this.drawVerticalArrow(ctx, cx, 24, 14, -1);
-        this.drawVerticalArrow(ctx, cx, size - 24, 14, 1);
+        // 2. 纵向贯穿极光流束 (柔和轻透，不破坏整体萌宠感)
+        const beamW = 14;
+        const beamGrad = ctx.createLinearGradient(cx, cy - half * 0.75, cx, cy + half * 0.75);
+        beamGrad.addColorStop(0, 'rgba(0, 210, 255, 0)');
+        beamGrad.addColorStop(0.2, 'rgba(0, 242, 254, 0.45)');
+        beamGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+        beamGrad.addColorStop(0.8, 'rgba(0, 242, 254, 0.45)');
+        beamGrad.addColorStop(1, 'rgba(0, 210, 255, 0)');
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(cx - beamW / 2, cy - half * 0.75, beamW, half * 1.5, beamW / 2);
+        } else {
+            ctx.rect(cx - beamW / 2, cy - half * 0.75, beamW, half * 1.5);
+        }
+        ctx.fill();
+
+        // 3. 上下两侧对称的冲天火箭发射舱与晶石激光能量箭头
+        this.drawVerticalRocketPod(ctx, cx, cy - half * 0.62, -1, size);
+        this.drawVerticalRocketPod(ctx, cx, cy + half * 0.62, 1, size);
+
+        // 4. 中心镶嵌发光能量核心
+        this.drawEnergyCoreGem(ctx, cx, cy, 11);
+
         ctx.restore();
     }
 
     /**
-     * 炸弹华丽能量护盾
+     * 💣 大师级 3x3 范围爆炸烈焰熔岩能量护盾 (Explosive Magma Aura)
+     * 淘汰黄色虚线圆，升级为炽热脉冲冲击波、引线爆裂火花与悬浮能量晶石
      */
     private static drawBombAura(ctx: CanvasRenderingContext2D, size: number) {
         const cx = size / 2;
@@ -780,36 +851,436 @@ export class ArtFactory {
         const r = size * 0.44;
 
         ctx.save();
-        ctx.shadowColor = '#ff9f43';
-        ctx.shadowBlur = 16;
-        ctx.strokeStyle = '#ffd32a';
-        ctx.lineWidth = 8;
-        ctx.setLineDash([14, 10]);
+
+        // 1. 尝试叠加 AI 生成的超清水晶糖果炸弹贴图
+        const aiImg = SpecialTileAssets.getImage('BOMB');
+        if (aiImg) {
+            ctx.drawImage(aiImg, 0, 0, size, size);
+        }
+
+        // 2. 8 瓣旋转烈焰能量波冲击圈 (Radiating Flame Shockwave)
+        ctx.shadowColor = '#ff6b4a';
+        ctx.shadowBlur = 18;
+
+        const petals = 8;
         ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        for (let i = 0; i < petals * 2; i++) {
+            const angle = (Math.PI / petals) * i;
+            const dist = i % 2 === 0 ? r + 6 : r - 4;
+            const px = cx + Math.cos(angle) * dist;
+            const py = cy + Math.sin(angle) * dist;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = '#ff9f43';
+        ctx.lineWidth = 5;
         ctx.stroke();
 
-        // 右上角点缀引燃小火花星
-        this.drawGoldStar(ctx, cx + r * 0.7, cy - r * 0.7, 4, 18, 7);
+        // 3. 内部金光能量护盾圆环
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffd32a';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // 4. 四角悬浮的 4 颗爆裂能量小晶核 (4 Orbiting Fire Embers)
+        const angles = [Math.PI / 4, (Math.PI * 3) / 4, (Math.PI * 5) / 4, (Math.PI * 7) / 4];
+        for (const ang of angles) {
+            const emberX = cx + Math.cos(ang) * (r - 2);
+            const emberY = cy + Math.sin(ang) * (r - 2);
+            this.drawFireEmber(ctx, emberX, emberY, 7);
+        }
+
+        // 5. 右上角卷曲引火线与噼啪飞溅爆炸火花 (Sparking Fuse & Firework Sparks)
+        const fuseStartX = cx + r * 0.52;
+        const fuseStartY = cy - r * 0.52;
+        const sparkX = cx + r * 0.78;
+        const sparkY = cy - r * 0.78;
+
+        // 卷曲引线
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#576574';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(fuseStartX, fuseStartY);
+        ctx.quadraticCurveTo(cx + r * 0.62, cy - r * 0.78, sparkX, sparkY);
+        ctx.stroke();
+
+        // 噼啪爆裂火花光芒 (Spark Flares)
+        ctx.shadowColor = '#ffd32a';
+        ctx.shadowBlur = 15;
+        const sparkCount = 6;
+        for (let i = 0; i < sparkCount; i++) {
+            const sAngle = (Math.PI * 2 / sparkCount) * i;
+            const slen = 9 + (i % 2) * 6;
+            ctx.strokeStyle = i % 2 === 0 ? '#fff200' : '#ff3838';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(sparkX, sparkY);
+            ctx.lineTo(sparkX + Math.cos(sAngle) * slen, sparkY + Math.sin(sAngle) * slen);
+            ctx.stroke();
+        }
+        // 引线顶端高亮金色火星
+        this.drawRadiantStar(ctx, sparkX, sparkY, 4, 12, 4.5, '#ffffff');
+
         ctx.restore();
     }
 
-    private static drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, dir: number) {
+    /**
+     * 绘制萌系高能火箭推进机舱与双向晶体激光箭头
+     */
+    private static drawRocketPod(ctx: CanvasRenderingContext2D, x: number, y: number, dir: number, size: number) {
+        ctx.save();
+
+        // 1. 向内喷射的高能推进尾焰
+        const exhaustLen = 22;
+        const flameGrad = ctx.createLinearGradient(x, y, x - exhaustLen * dir, y);
+        flameGrad.addColorStop(0, '#ffffff');
+        flameGrad.addColorStop(0.35, '#00f2fe');
+        flameGrad.addColorStop(0.7, '#ff9f43');
+        flameGrad.addColorStop(1, 'rgba(255, 107, 74, 0)');
+        ctx.fillStyle = flameGrad;
         ctx.beginPath();
-        ctx.moveTo(x + s * dir, y);
-        ctx.lineTo(x, y - s * 0.7);
-        ctx.lineTo(x, y + s * 0.7);
+        ctx.moveTo(x, y - 6);
+        ctx.quadraticCurveTo(x - exhaustLen * 0.6 * dir, y - 8, x - exhaustLen * dir, y);
+        ctx.quadraticCurveTo(x - exhaustLen * 0.6 * dir, y + 8, x, y + 6);
         ctx.closePath();
         ctx.fill();
+
+        // 2. 超声速空气动力学速度流光线
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 14 * dir, y - 10);
+        ctx.lineTo(x + 36 * dir, y - 10);
+        ctx.moveTo(x + 18 * dir, y + 10);
+        ctx.lineTo(x + 38 * dir, y + 10);
+        ctx.stroke();
+
+        // 3. 朝外的流线型立体激光能量箭头 (Prismatic Arrowhead)
+        const arrowTipX = x + 34 * dir;
+        const arrowBaseX = x + 10 * dir;
+        const arrowH = 14;
+
+        ctx.shadowColor = '#00f2fe';
+        ctx.shadowBlur = 14;
+
+        // 箭头外发光轮廓底
+        ctx.beginPath();
+        ctx.moveTo(arrowTipX, y);
+        ctx.lineTo(arrowBaseX, y - arrowH);
+        ctx.lineTo(arrowBaseX + 6 * dir, y);
+        ctx.lineTo(arrowBaseX, y + arrowH);
+        ctx.closePath();
+        ctx.fillStyle = '#00d2d3';
+        ctx.fill();
+
+        // 箭头立体切面 - 上半部分高光亮面
+        ctx.beginPath();
+        ctx.moveTo(arrowTipX, y);
+        ctx.lineTo(arrowBaseX, y - arrowH);
+        ctx.lineTo(arrowBaseX + 6 * dir, y);
+        ctx.closePath();
+        const topGrad = ctx.createLinearGradient(arrowBaseX, y - arrowH, arrowTipX, y);
+        topGrad.addColorStop(0, '#ffffff');
+        topGrad.addColorStop(0.6, '#70a1ff');
+        topGrad.addColorStop(1, '#ffffff');
+        ctx.fillStyle = topGrad;
+        ctx.fill();
+
+        // 箭头立体切面 - 下半部分深色暗面
+        ctx.beginPath();
+        ctx.moveTo(arrowTipX, y);
+        ctx.lineTo(arrowBaseX, y + 6 * dir);
+        ctx.lineTo(arrowBaseX, y + arrowH);
+        ctx.closePath();
+        const btmGrad = ctx.createLinearGradient(arrowBaseX, y, arrowTipX, y + arrowH);
+        btmGrad.addColorStop(0, '#0984e3');
+        btmGrad.addColorStop(1, '#00d2d3');
+        ctx.fillStyle = btmGrad;
+        ctx.fill();
+
+        // 箭头外边框晶体描边
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 4. 尖端爆发的四角极光钻石星芒
+        this.drawRadiantStar(ctx, arrowTipX + 2 * dir, y, 4, 10, 3.5, '#ffffff');
+
+        ctx.restore();
     }
 
-    private static drawVerticalArrow(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, dir: number) {
+    /**
+     * 绘制纵向冲天火箭推进机舱与立体晶体激光箭头
+     */
+    private static drawVerticalRocketPod(ctx: CanvasRenderingContext2D, x: number, y: number, dir: number, size: number) {
+        ctx.save();
+
+        // 1. 向内喷射的高能推进尾焰
+        const exhaustLen = 22;
+        const flameGrad = ctx.createLinearGradient(x, y, x, y - exhaustLen * dir);
+        flameGrad.addColorStop(0, '#ffffff');
+        flameGrad.addColorStop(0.35, '#00f2fe');
+        flameGrad.addColorStop(0.7, '#ff9f43');
+        flameGrad.addColorStop(1, 'rgba(255, 107, 74, 0)');
+        ctx.fillStyle = flameGrad;
         ctx.beginPath();
-        ctx.moveTo(x, y + s * dir);
-        ctx.lineTo(x - s * 0.7, y);
-        ctx.lineTo(x + s * 0.7, y);
+        ctx.moveTo(x - 6, y);
+        ctx.quadraticCurveTo(x - 8, y - exhaustLen * 0.6 * dir, x, y - exhaustLen * dir);
+        ctx.quadraticCurveTo(x + 8, y - exhaustLen * 0.6 * dir, x + 6, y);
         ctx.closePath();
         ctx.fill();
+
+        // 2. 垂直超声速速度流光线
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x - 10, y + 14 * dir);
+        ctx.lineTo(x - 10, y + 36 * dir);
+        ctx.moveTo(x + 10, y + 18 * dir);
+        ctx.lineTo(x + 10, y + 38 * dir);
+        ctx.stroke();
+
+        // 3. 立体纵向激光能量箭头
+        const arrowTipY = y + 34 * dir;
+        const arrowBaseY = y + 10 * dir;
+        const arrowW = 14;
+
+        ctx.shadowColor = '#00f2fe';
+        ctx.shadowBlur = 14;
+
+        ctx.beginPath();
+        ctx.moveTo(x, arrowTipY);
+        ctx.lineTo(x - arrowW, arrowBaseY);
+        ctx.lineTo(x, arrowBaseY + 6 * dir);
+        ctx.lineTo(x + arrowW, arrowBaseY);
+        ctx.closePath();
+        ctx.fillStyle = '#00d2d3';
+        ctx.fill();
+
+        // 左切面高光
+        ctx.beginPath();
+        ctx.moveTo(x, arrowTipY);
+        ctx.lineTo(x - arrowW, arrowBaseY);
+        ctx.lineTo(x, arrowBaseY + 6 * dir);
+        ctx.closePath();
+        const leftGrad = ctx.createLinearGradient(x - arrowW, arrowBaseY, x, arrowTipY);
+        leftGrad.addColorStop(0, '#ffffff');
+        leftGrad.addColorStop(0.6, '#70a1ff');
+        leftGrad.addColorStop(1, '#ffffff');
+        ctx.fillStyle = leftGrad;
+        ctx.fill();
+
+        // 右切面暗面
+        ctx.beginPath();
+        ctx.moveTo(x, arrowTipY);
+        ctx.lineTo(x, arrowBaseY + 6 * dir);
+        ctx.lineTo(x + arrowW, arrowBaseY);
+        ctx.closePath();
+        const rightGrad = ctx.createLinearGradient(x, arrowBaseY, x + arrowW, arrowTipY);
+        rightGrad.addColorStop(0, '#0984e3');
+        rightGrad.addColorStop(1, '#00d2d3');
+        ctx.fillStyle = rightGrad;
+        ctx.fill();
+
+        // 边框描边
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 4. 尖端爆发的四角极光钻石星芒
+        this.drawRadiantStar(ctx, x, arrowTipY + 2 * dir, 4, 10, 3.5, '#ffffff');
+
+        ctx.restore();
+    }
+
+    /**
+     * 绘制腰腹部中央高能能量水晶核心
+     */
+    private static drawEnergyCoreGem(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
+        ctx.save();
+        ctx.shadowColor = '#00f2fe';
+        ctx.shadowBlur = 10;
+
+        // 菱形宝石底托
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - radius);
+        ctx.lineTo(cx + radius, cy);
+        ctx.lineTo(cx, cy + radius);
+        ctx.lineTo(cx - radius, cy);
+        ctx.closePath();
+        ctx.fillStyle = '#ffd32a';
+        ctx.fill();
+
+        // 宝石晶体核心
+        const innerR = radius * 0.72;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - innerR);
+        ctx.lineTo(cx + innerR, cy);
+        ctx.lineTo(cx, cy + innerR);
+        ctx.lineTo(cx - innerR, cy);
+        ctx.closePath();
+        const gemGrad = ctx.createLinearGradient(cx - innerR, cy - innerR, cx + innerR, cy + innerR);
+        gemGrad.addColorStop(0, '#ffffff');
+        gemGrad.addColorStop(0.5, '#00d2d3');
+        gemGrad.addColorStop(1, '#0984e3');
+        ctx.fillStyle = gemGrad;
+        ctx.fill();
+
+        // 宝石中心高光星斑
+        this.drawRadiantStar(ctx, cx, cy, 4, 5, 2, '#ffffff');
+        ctx.restore();
+    }
+
+    /**
+     * 绘制悬浮爆裂能量小晶核
+     */
+    private static drawFireEmber(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+        ctx.save();
+        ctx.shadowColor = '#ff4757';
+        ctx.shadowBlur = 10;
+
+        // 晶核渐变
+        const emberGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 1, x, y, r);
+        emberGrad.addColorStop(0, '#fffbe0');
+        emberGrad.addColorStop(0.4, '#ffd32a');
+        emberGrad.addColorStop(0.8, '#ff4757');
+        emberGrad.addColorStop(1, '#5352ed');
+        ctx.fillStyle = emberGrad;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 月牙微光
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    /**
+     * 绘制多角星芒
+     */
+    private static drawRadiantStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes: number, outerRad: number, innerRad: number, color: string) {
+        ctx.save();
+        let rot = (Math.PI / 2) * 3;
+        let x = cx;
+        let y = cy;
+        const step = Math.PI / spikes;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - outerRad);
+        for (let i = 0; i < spikes; i++) {
+            x = cx + Math.cos(rot) * outerRad;
+            y = cy + Math.sin(rot) * outerRad;
+            ctx.lineTo(x, y);
+            rot += step;
+
+            x = cx + Math.cos(rot) * innerRad;
+            y = cy + Math.sin(rot) * innerRad;
+            ctx.lineTo(x, y);
+            rot += step;
+        }
+        ctx.lineTo(cx, cy - outerRad);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    /**
+     * 绘制七彩球金色萌羽翅膀
+     */
+    private static drawAngelWing(ctx: CanvasRenderingContext2D, cx: number, cy: number, isLeft: boolean, size: number) {
+        ctx.save();
+        const dir = isLeft ? -1 : 1;
+        ctx.translate(cx, cy);
+        ctx.scale(dir, 1);
+
+        // 羽毛金光渐变
+        const wingGrad = ctx.createLinearGradient(0, -25, 45, 15);
+        wingGrad.addColorStop(0, '#fffbe0');
+        wingGrad.addColorStop(0.5, 'rgba(255, 211, 42, 0.9)');
+        wingGrad.addColorStop(1, 'rgba(255, 159, 26, 0.5)');
+
+        // 三层羽毛舒展
+        ctx.fillStyle = wingGrad;
+        ctx.shadowColor = '#ffd32a';
+        ctx.shadowBlur = 12;
+
+        // 主羽
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(20, -35, 46, -22);
+        ctx.quadraticCurveTo(28, -6, 0, 10);
+        ctx.closePath();
+        ctx.fill();
+
+        // 次羽
+        ctx.beginPath();
+        ctx.moveTo(5, 5);
+        ctx.quadraticCurveTo(25, -18, 42, -5);
+        ctx.quadraticCurveTo(22, 10, 5, 20);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    /**
+     * 绘制立体多面体八角闪耀金星 (3D Faceted Octagram Star)
+     */
+    private static drawFacetedStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR: number, innerR: number) {
+        ctx.save();
+        ctx.shadowColor = '#ffd32a';
+        ctx.shadowBlur = 20;
+
+        const spikes = 8;
+        const step = (Math.PI * 2) / spikes;
+
+        for (let i = 0; i < spikes; i++) {
+            const isMain = i % 2 === 0;
+            const rCur = isMain ? outerR : outerR * 0.65;
+            const angleCur = -Math.PI / 2 + i * step;
+            const angleNext = angleCur + step;
+            const angleMid = angleCur + step / 2;
+
+            const tipX = cx + Math.cos(angleCur) * rCur;
+            const tipY = cy + Math.sin(angleCur) * rCur;
+
+            const innerX1 = cx + Math.cos(angleCur - step / 2) * innerR;
+            const innerY1 = cy + Math.sin(angleCur - step / 2) * innerR;
+
+            const innerX2 = cx + Math.cos(angleMid) * innerR;
+            const innerY2 = cy + Math.sin(angleMid) * innerR;
+
+            // 亮面半切面
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(tipX, tipY);
+            ctx.lineTo(innerX1, innerY1);
+            ctx.closePath();
+            ctx.fillStyle = isMain ? '#ffffff' : '#ffd32a';
+            ctx.fill();
+
+            // 暗面半切面
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(tipX, tipY);
+            ctx.lineTo(innerX2, innerY2);
+            ctx.closePath();
+            ctx.fillStyle = isMain ? '#ffd32a' : '#ff9f1a';
+            ctx.fill();
+        }
+
+        // 中心高光星光核
+        this.drawRadiantStar(ctx, cx, cy, 4, innerR * 0.9, innerR * 0.4, '#ffffff');
+
+        ctx.restore();
     }
 
     /**
