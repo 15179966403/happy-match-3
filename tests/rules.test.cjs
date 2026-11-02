@@ -44,6 +44,23 @@ test('shield absorbs damage before health and fatal damage ends the level', () =
     assert.equal(fatal.state.status, 'lost');
 });
 
+test('chain shield requires two elimination waves and never exceeds two stacks', () => {
+    const level = LEVELS[8];
+    assert.deepEqual(level.rules, ['chain_shield']);
+    const start = createLevelState(level);
+    assert.equal(settleAction(level, start, 0, 1).state.shield, 0);
+    const earned = settleAction(level, start, 0, 2);
+    assert.equal(earned.shieldGained, 1);
+    assert.equal(earned.state.shield, 1);
+    assert.equal(settleAction(level, { ...start, shield: 2 }, 0, 3).state.shield, 2);
+    const damageTurn = { ...start, danger: level.dangerInterval - 1 };
+    const blocked = settleAction(level, damageTurn, 0, 2);
+    assert.equal(blocked.shieldGained, 1);
+    assert.equal(blocked.shieldUsed, 1);
+    assert.equal(blocked.healthLost, 0);
+    assert.equal(settleAction(LEVELS[0], createLevelState(LEVELS[0]), 0, 2).shieldGained, 0);
+});
+
 test('all sample level targets can be reached by their placed content', () => {
     for (const level of LEVELS) {
         assert.ok(level.goal.required > 0);

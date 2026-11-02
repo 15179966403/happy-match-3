@@ -4,7 +4,7 @@
 
 ## 当前玩法
 
-- 首轮提供 5 关，每关只有一个目标：消除指定动物、清除冰层或解开藤蔓。
+- 首轮提供 10 关样例，每关只有一个目标：消除指定动物、清除冰层或解开藤蔓。第 9–10 关引入“两轮连消获得护盾”规则。
 - 不限制总步数。每完成一定次数的有效交换，若尚未达成目标就受到 1 点伤害；生命耗尽则本关失败。无效交换不计入行动。
 - 目标在一次行动中达成时立即获胜，该行动不再结算周期伤害。胜利后进入下一关；失败可以重试本关。
 - 关卡目标、生命值、受伤间隔和障碍摆放配置位于 `assets/scripts/LevelRules.ts`。护盾结算接口已预留，遗物系统尚未接入。
@@ -33,7 +33,7 @@
 
 - `assets/scripts/GameManager.ts`：界面、棋盘、交互、消除和视觉反馈。
 - `assets/scripts/MatchLogic.ts`：匹配、特殊道具组合、掉落和洗牌。
-- `assets/scripts/LevelRules.ts`：五关样例配置、目标与生命值结算。
+- `assets/scripts/LevelRules.ts`：十关样例配置、目标与生命值结算。
 - `assets/scripts/TileItem.ts`：单个棋子的显示与移动动画。
 - `assets/scripts/ArtFactory.ts`、`VisualAssets.ts`：贴图预加载和 SpriteFrame 创建。
 - `assets/scripts/AudioService.ts`：程序生成音效。
@@ -42,5 +42,5 @@
 
 - [技术路线图](docs/TECHNICAL_ROADMAP.md)：规则引擎、关卡数据、资源与质量体系。
 - [项目迭代计划](docs/ITERATION_PLAN.md)：阶段、里程碑、关卡节奏与发布门槛。
-- [血条关卡规则游玩集](docs/GAMEPLAY_RULESET.md)：单目标、周期受伤、关卡变体与未来遗物接口；当前已落地首轮五关基础规则。
+- [血条关卡规则游玩集](docs/GAMEPLAY_RULESET.md)：单目标、周期受伤、关卡变体与未来遗物接口；当前已落地十关样例及连锁护盾规则。
 - [用户故事](docs/USER_STORIES.md)：玩家与开发者需求及可验证的验收条件。

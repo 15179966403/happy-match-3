@@ -22,6 +22,7 @@ export class GameManager extends Component {
     private healthLabel: Label = null!;
     private dangerLabel: Label = null!;
     private goalLabel: Label = null!;
+    private tipLabel: Label = null!;
     private progressFill: Node = null!;
     private healthFill: Node = null!;
     private bannerNode: Node = null!;
@@ -45,6 +46,7 @@ export class GameManager extends Component {
     private isBusy: boolean = false;
     private isGameOver: boolean = false;
     private currentCombo: number = 0;
+    private resolvedWaves: number = 0;
 
     // 手势与选中交互
     private selectedTile: TileItem | null = null;
@@ -241,7 +243,7 @@ export class GameManager extends Component {
 
         const tip = panel(this.node, 'TipPanel', 0, -474, 610, 66,
             new Color(255, 247, 221, 235), new Color(255, 209, 138));
-        addLabel(tip, 'TipText', '达成目标即胜利 · 行动累积会受伤', 24, ink, 0, 0, 570, 42);
+        this.tipLabel = addLabel(tip, 'TipText', '达成目标即胜利 · 行动累积会受伤', 24, ink, 0, 0, 570, 42);
 
         this.bannerNode = panel(this.node, 'BannerNode', 0, 65, 440, 82,
             new Color(255, 118, 104), new Color(255, 239, 177));
@@ -270,12 +272,15 @@ export class GameManager extends Component {
         this.pendingGoalProgress = 0;
         this.score = 0;
         this.currentCombo = 0;
+        this.resolvedWaves = 0;
         this.isBusy = false;
         this.isGameOver = false;
         this.modalNode.active = false;
 
         // 初始化障碍物 (冰块与藤蔓)
         this.initObstacles(this.currentLevel);
+        this.tipLabel.string = this.levelConfig.rules?.includes('chain_shield')
+            ? '两轮连消获得护盾 · 最多 2 层' : '达成目标即胜利 · 行动累积会受伤';
         this.updateUI();
 
         // 清理旧图块
@@ -480,7 +485,8 @@ export class GameManager extends Component {
 
     private updateUI() {
         if (this.titleLabel) this.titleLabel.string = `第 ${this.currentLevel} 关`;
-        if (this.healthLabel) this.healthLabel.string = `${this.levelState.health} / ${this.levelConfig.maxHealth}`;
+        if (this.healthLabel) this.healthLabel.string = `${this.levelState.health}/${this.levelConfig.maxHealth}` +
+            (this.levelState.shield > 0 ? ` 盾${this.levelState.shield}` : '');
         if (this.healthFill) this.healthFill.setScale(this.levelState.health / this.levelConfig.maxHealth, 1, 1);
         if (this.dangerLabel) {
             const remaining = this.levelConfig.dangerInterval - this.levelState.danger;
@@ -661,6 +667,7 @@ export class GameManager extends Component {
         // 一次有效行动先结算棋盘，血条压力在整轮连锁结束后处理。
         this.pendingGoalProgress = 0;
         this.currentCombo = 0;
+        this.resolvedWaves = 0;
         const vineProtectedTiles = new Set<TileData>();
 
         // 彩鸟或双特殊动物组合直接触发；单个特殊动物仍需参与同种匹配。
@@ -817,6 +824,7 @@ export class GameManager extends Component {
         const newlyProtected = await this.hitObstaclesAtPositions(hitPositions);
         newlyProtected.forEach(tile => vineProtectedTiles.add(tile));
         const eliminated = Array.from(allToEliminate).filter(tile => !vineProtectedTiles.has(tile));
+        if (eliminated.length > 0) this.resolvedWaves++;
         this.playSpecialVisuals(eliminated);
 
         // 累积分数
@@ -976,6 +984,7 @@ export class GameManager extends Component {
             const newlyProtected = await this.hitObstaclesAtPositions(hitPositions);
             newlyProtected.forEach(tile => vineProtectedTiles.add(tile));
             const eliminated = Array.from(allToEliminate).filter(tile => !vineProtectedTiles.has(tile));
+            if (eliminated.length > 0) this.resolvedWaves++;
             this.playSpecialVisuals(eliminated);
 
             // 执行消除动画并加分
@@ -1092,7 +1101,7 @@ export class GameManager extends Component {
 
     /** 一次有效行动的目标、周期伤害与胜负结算。 */
     private checkGameStatus() {
-        const result = settleAction(this.levelConfig, this.levelState, this.pendingGoalProgress);
+        const result = settleAction(this.levelConfig, this.levelState, this.pendingGoalProgress, this.resolvedWaves);
         this.levelState = result.state;
         this.pendingGoalProgress = 0;
         this.updateUI();
@@ -1107,7 +1116,9 @@ export class GameManager extends Component {
             AudioService.playLocked();
             this.showBannerMessage(`受到 ${result.healthLost} 点伤害！`);
         } else if (result.shieldUsed > 0) {
-            this.showBannerMessage('护盾挡住了伤害！');
+            this.showBannerMessage('连锁护盾挡住了伤害！');
+        } else if (result.shieldGained > 0) {
+            this.showBannerMessage('连锁护盾 +1！');
         }
         if (this.levelState.status === 'lost') {
             this.isGameOver = true;
