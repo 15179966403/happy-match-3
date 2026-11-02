@@ -4,7 +4,7 @@ import { TileItem } from './TileItem';
 import { MatchLogic } from './MatchLogic';
 import { AudioService } from './AudioService';
 import { ArtFactory } from './ArtFactory';
-import { SpecialTileAssets } from './SpecialTileAssets';
+import { VisualAssets } from './VisualAssets';
 
 const { ccclass } = _decorator;
 
@@ -20,6 +20,8 @@ export class GameManager extends Component {
     private scoreLabel: Label = null!;
     private movesLabel: Label = null!;
     private iceLabel: Label = null!;
+    private goalLabel: Label = null!;
+    private progressFill: Node = null!;
     private bannerNode: Node = null!;
     private bannerLabel: Label = null!;
     private modalNode: Node = null!;
@@ -68,14 +70,6 @@ export class GameManager extends Component {
     }
 
     onLoad() {
-        SpecialTileAssets.init(() => {
-            ArtFactory.invalidateSpecialSprites();
-            for (const row of this.tileItems) {
-                for (const tile of row) {
-                    if (tile && tile.node.isValid && tile.data.special !== SpecialType.NONE) tile.renderView();
-                }
-            }
-        });
         this.node.layer = Layers.Enum.UI_2D;
         const rootTransform = this.node.getComponent(UITransform) || this.node.addComponent(UITransform);
         rootTransform.setContentSize(750, 1334);
@@ -92,235 +86,151 @@ export class GameManager extends Component {
             this.node.addChild(camNode);
         }
 
-        this.buildGameUI();
-        this.startNewGame();
+        VisualAssets.init(() => {
+            if (!this.node.isValid) return;
+            this.buildGameUI();
+            this.startNewGame();
+        });
     }
 
-    /**
-     * 构建高美感糖果森林童话 UI
-     */
+    /** 童话果园主题界面：背景画、奶油色 HUD、棋盘和底部提示栏。 */
     private buildGameUI() {
-        // 1. 梦幻晨曦森林背景
-        const bgNode = this.createUINode('Background', 750, 1334);
-        const bgG = bgNode.addComponent(Graphics);
+        const ink = new Color(91, 57, 37);
+        const cream = new Color(255, 248, 225);
+        const white = new Color(255, 255, 255);
+        const addLabel = (parent: Node, name: string, value: string, size: number,
+                          color: Color, x: number, y: number, width: number, height: number): Label => {
+            const node = this.createUINode(name, width, height);
+            node.setPosition(x, y, 0);
+            const label = node.addComponent(Label);
+            label.string = value;
+            label.fontSize = size;
+            label.lineHeight = size + 5;
+            label.color = color;
+            label.isBold = true;
+            parent.addChild(node);
+            return label;
+        };
+        const panel = (parent: Node, name: string, x: number, y: number, w: number, h: number,
+                       fill: Color, edge: Color): Node => {
+            const node = this.createUINode(name, w, h);
+            node.setPosition(x, y, 0);
+            const g = node.addComponent(Graphics);
+            g.fillColor = new Color(125, 78, 41, 75);
+            g.roundRect(-w / 2, -h / 2 - 7, w, h, 24);
+            g.fill();
+            g.fillColor = fill;
+            g.roundRect(-w / 2, -h / 2, w, h, 24);
+            g.fill();
+            g.strokeColor = edge;
+            g.lineWidth = 4;
+            g.stroke();
+            parent.addChild(node);
+            return node;
+        };
 
-        // 主底色：天空水蓝
-        bgG.fillColor = new Color(225, 245, 255);
-        bgG.rect(-375, -667, 750, 1334);
-        bgG.fill();
-
-        // 柔和薄荷青草丘陵色块
-        bgG.fillColor = new Color(205, 238, 225);
-        bgG.circle(-180, -450, 320);
-        bgG.circle(220, -500, 360);
-        bgG.fill();
-
-        // 梦幻柔光光斑
-        bgG.fillColor = new Color(255, 255, 255, 120);
-        bgG.circle(-160, 380, 140);
-        bgG.circle(180, 220, 180);
-        bgG.circle(0, -120, 260);
-        bgG.fill();
-
+        const bgNode = this.createUINode('OrchardBackground', 750, 1334);
+        const bgSprite = bgNode.addComponent(Sprite);
+        bgSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        bgSprite.spriteFrame = ArtFactory.getBackgroundSprite();
         this.node.addChild(bgNode);
 
-        // 2. 顶部主标题 (带立体厚边与爱心挂饰)
-        const titleNode = this.createUINode('Title', 500, 80);
-        titleNode.setPosition(0, 565, 0);
+        const titlePanel = panel(this.node, 'TitlePanel', 0, 575, 520, 105,
+            new Color(255, 249, 228, 238), new Color(255, 214, 125));
+        addLabel(titlePanel, 'GameTitle', '果 园 奇 遇', 43, ink, 0, 15, 480, 55);
+        addLabel(titlePanel, 'Subtitle', '和小伙伴一起消除吧', 22,
+            new Color(176, 108, 66), 0, -29, 470, 30);
 
-        const titleG = titleNode.addComponent(Graphics);
-        titleG.fillColor = new Color(255, 255, 255, 220);
-        titleG.roundRect(-210, -32, 420, 64, 32);
-        titleG.fill();
-        titleG.strokeColor = new Color(255, 205, 75);
-        titleG.lineWidth = 3.5;
-        titleG.stroke();
+        const levelPill = panel(this.node, 'LevelPill', 0, 485, 230, 48,
+            new Color(255, 151, 95), new Color(255, 234, 181));
+        this.titleLabel = addLabel(levelPill, 'LevelLabel', '第 1 关', 27, white, 0, 0, 200, 42);
 
-        const titleTextNode = this.createUINode('TitleText', 460, 60);
-        this.titleLabel = titleTextNode.addComponent(Label);
-        this.titleLabel.string = `✨ 第 ${this.currentLevel} 关 · 开心消消乐 ✨`;
-        this.titleLabel.fontSize = 34;
-        this.titleLabel.lineHeight = 36;
-        this.titleLabel.color = new Color(75, 45, 30);
-        this.titleLabel.isBold = true;
-        titleNode.addChild(titleTextNode);
-        this.node.addChild(titleNode);
+        const hud = this.createUINode('Hud', 720, 105);
+        hud.setPosition(0, 406, 0);
+        this.node.addChild(hud);
+        const cardSpecs: Array<[string, number, Color, Color, string]> = [
+            ['MovesCard', -222, new Color(255, 246, 223), new Color(255, 185, 87), '剩余步数'],
+            ['IceCard', 0, new Color(236, 250, 255), new Color(113, 201, 237), '冰块目标'],
+            ['ScoreCard', 222, new Color(255, 241, 248), new Color(255, 159, 181), '当前积分'],
+        ];
+        const cards = cardSpecs.map(([name, x, fill, edge, caption]) => {
+            const card = panel(hud, name, x, 0, 204, 94, fill, edge);
+            addLabel(card, `${name}Caption`, caption, 20, new Color(137, 91, 69), 0, 23, 185, 27);
+            return card;
+        });
+        this.movesLabel = addLabel(cards[0], 'MovesValue', '35', 36, new Color(218, 106, 46), 0, -15, 185, 46);
+        this.iceLabel = addLabel(cards[1], 'IceValue', '0', 36, new Color(43, 137, 184), 0, -15, 185, 46);
+        this.scoreLabel = addLabel(cards[2], 'ScoreValue', '0', 34, new Color(209, 87, 126), 0, -15, 185, 46);
 
-        // 标题轻微治愈悬浮呼吸动画
-        tween(titleNode)
-            .to(1.8, { position: v3(0, 570, 0) }, { easing: 'sineInOut' })
-            .to(1.8, { position: v3(0, 560, 0) }, { easing: 'sineInOut' })
-            .union()
-            .repeatForever()
-            .start();
+        const progressPanel = panel(this.node, 'ProgressPanel', 0, 311, 610, 54,
+            new Color(255, 250, 230, 245), new Color(255, 219, 145));
+        const track = this.createUINode('ProgressTrack', 350, 22);
+        track.setPosition(-74, 0, 0);
+        const trackG = track.addComponent(Graphics);
+        trackG.fillColor = new Color(228, 195, 160);
+        trackG.roundRect(-175, -11, 350, 22, 11);
+        trackG.fill();
+        progressPanel.addChild(track);
+        this.progressFill = this.createUINode('ProgressFill', 334, 16);
+        this.progressFill.setPosition(-241, 0, 0);
+        const fillG = this.progressFill.addComponent(Graphics);
+        fillG.fillColor = new Color(255, 141, 93);
+        fillG.roundRect(0, -8, 334, 16, 8);
+        fillG.fill();
+        progressPanel.addChild(this.progressFill);
+        this.goalLabel = addLabel(progressPanel, 'GoalLabel', '目标 6000', 20, ink, 205, 0, 170, 34);
 
-        // 3. 计分板与步数信息栏 (果冻曲奇立体三卡片布局)
-        const infoBar = this.createUINode('InfoBar', 720, 110);
-        infoBar.setPosition(0, 465, 0);
-        this.node.addChild(infoBar);
-
-        // 步数卡片 (金黄香脆曲奇风)
-        const movesCard = this.createUINode('MovesCard', 190, 80);
-        movesCard.setPosition(-235, 0, 0);
-        const movesBg = movesCard.addComponent(Graphics);
-        movesBg.fillColor = new Color(210, 105, 0);
-        movesBg.roundRect(-88, -38, 176, 76, 20);
-        movesBg.fill();
-        movesBg.fillColor = new Color(255, 155, 25);
-        movesBg.roundRect(-88, -34, 176, 72, 18);
-        movesBg.fill();
-        movesBg.fillColor = new Color(255, 255, 255, 70);
-        movesBg.roundRect(-78, 6, 156, 14, 7);
-        movesBg.fill();
-
-        const movesText = this.createUINode('MovesText', 170, 50);
-        this.movesLabel = movesText.addComponent(Label);
-        this.movesLabel.string = `⚡ 步数: ${this.remainingMoves}`;
-        this.movesLabel.fontSize = 22;
-        this.movesLabel.lineHeight = 24;
-        this.movesLabel.color = Color.WHITE;
-        this.movesLabel.isBold = true;
-        movesCard.addChild(movesText);
-        infoBar.addChild(movesCard);
-
-        // 冰块目标卡片 (浅冰蓝冰晶风)
-        const iceCard = this.createUINode('IceCard', 190, 80);
-        iceCard.setPosition(-25, 0, 0);
-        const iceBg = iceCard.addComponent(Graphics);
-        iceBg.fillColor = new Color(40, 120, 190);
-        iceBg.roundRect(-88, -38, 176, 76, 20);
-        iceBg.fill();
-        iceBg.fillColor = new Color(70, 175, 245);
-        iceBg.roundRect(-88, -34, 176, 72, 18);
-        iceBg.fill();
-        iceBg.fillColor = new Color(255, 255, 255, 80);
-        iceBg.roundRect(-78, 6, 156, 14, 7);
-        iceBg.fill();
-
-        const iceText = this.createUINode('IceText', 170, 50);
-        this.iceLabel = iceText.addComponent(Label);
-        this.iceLabel.string = `❄️ 冰块: 0`;
-        this.iceLabel.fontSize = 22;
-        this.iceLabel.lineHeight = 24;
-        this.iceLabel.color = Color.WHITE;
-        this.iceLabel.isBold = true;
-        iceCard.addChild(iceText);
-        infoBar.addChild(iceCard);
-
-        // 分数卡片 (翡翠薄荷糖果风)
-        const scoreCard = this.createUINode('ScoreCard', 230, 80);
-        scoreCard.setPosition(205, 0, 0);
-        const scoreBg = scoreCard.addComponent(Graphics);
-        scoreBg.fillColor = new Color(25, 135, 80);
-        scoreBg.roundRect(-110, -38, 220, 76, 20);
-        scoreBg.fill();
-        scoreBg.fillColor = new Color(46, 204, 113);
-        scoreBg.roundRect(-110, -34, 220, 72, 18);
-        scoreBg.fill();
-        scoreBg.fillColor = new Color(255, 255, 255, 70);
-        scoreBg.roundRect(-100, 6, 200, 14, 7);
-        scoreBg.fill();
-
-        const scoreText = this.createUINode('ScoreText', 210, 50);
-        this.scoreLabel = scoreText.addComponent(Label);
-        this.scoreLabel.string = `⭐ 得分: 0 / ${this.targetScore}`;
-        this.scoreLabel.fontSize = 19;
-        this.scoreLabel.lineHeight = 22;
-        this.scoreLabel.color = Color.WHITE;
-        this.scoreLabel.isBold = true;
-        scoreCard.addChild(scoreText);
-        infoBar.addChild(scoreCard);
-
-        // 4. 棋盘底盘 (果冻模具立体凹槽底盘)
-        const totalW = GAME_CONFIG.COLS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 20;
-        const totalH = GAME_CONFIG.ROWS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 20;
-
+        const totalW = GAME_CONFIG.COLS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 24;
+        const totalH = GAME_CONFIG.ROWS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 24;
         const boardBgNode = this.createUINode('BoardBackground', totalW, totalH);
-        boardBgNode.setPosition(0, -35, 0);
-        const boardBgG = boardBgNode.addComponent(Graphics);
-
-        // 外层阴影底座
-        boardBgG.fillColor = new Color(160, 190, 215, 180);
-        boardBgG.roundRect(-totalW / 2, -totalH / 2 - 8, totalW, totalH + 8, 30);
-        boardBgG.fill();
-
-        // 奶油白象牙底盘
-        boardBgG.fillColor = new Color(248, 252, 255);
-        boardBgG.roundRect(-totalW / 2, -totalH / 2, totalW, totalH, 28);
-        boardBgG.fill();
-
-        // 边框描边
-        boardBgG.strokeColor = new Color(205, 225, 245);
-        boardBgG.lineWidth = 4;
-        boardBgG.stroke();
-
-        // 内部温和半透明冰晶层
-        boardBgG.fillColor = new Color(228, 240, 252, 210);
-        boardBgG.roundRect(-totalW / 2 + 6, -totalH / 2 + 6, totalW - 12, totalH - 12, 24);
-        boardBgG.fill();
-
-        // 绘制每个单元格的内凹布丁凹槽
-        for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
-            for (let c = 0; c < GAME_CONFIG.COLS; c++) {
-                const pos = TileItem.getPos(r, c);
-                const half = GAME_CONFIG.TILE_SIZE / 2;
-
-                // 凹槽内暗角
-                boardBgG.fillColor = new Color(195, 215, 235, 140);
-                boardBgG.roundRect(pos.x - half + 1, pos.y - half + 1, GAME_CONFIG.TILE_SIZE - 2, GAME_CONFIG.TILE_SIZE - 2, 16);
-                boardBgG.fill();
-
-                // 凹槽下缘高光线 (增强立体下沉深度)
-                boardBgG.fillColor = new Color(255, 255, 255, 180);
-                boardBgG.roundRect(pos.x - half + 3, pos.y - half + 3, GAME_CONFIG.TILE_SIZE - 6, GAME_CONFIG.TILE_SIZE - 8, 14);
-                boardBgG.fill();
+        boardBgNode.setPosition(0, -50, 0);
+        const board = boardBgNode.addComponent(Graphics);
+        board.fillColor = new Color(136, 83, 53, 105);
+        board.roundRect(-totalW / 2, -totalH / 2 - 12, totalW, totalH, 36);
+        board.fill();
+        board.fillColor = new Color(255, 244, 211);
+        board.roundRect(-totalW / 2, -totalH / 2, totalW, totalH, 36);
+        board.fill();
+        board.strokeColor = new Color(255, 205, 129);
+        board.lineWidth = 5;
+        board.stroke();
+        board.fillColor = new Color(247, 211, 160);
+        board.roundRect(-totalW / 2 + 9, -totalH / 2 + 9, totalW - 18, totalH - 18, 27);
+        board.fill();
+        for (let row = 0; row < GAME_CONFIG.ROWS; row++) {
+            for (let col = 0; col < GAME_CONFIG.COLS; col++) {
+                const pos = TileItem.getPos(row, col);
+                board.fillColor = (row + col) % 2 === 0
+                    ? new Color(255, 235, 195) : new Color(255, 225, 177);
+                board.roundRect(pos.x - 35, pos.y - 35, 70, 70, 16);
+                board.fill();
             }
         }
         this.node.addChild(boardBgNode);
 
-        // 4.5 冰块容器层 (垫在底盘上、动物脚下)
         this.iceContainer = this.createUINode('IceContainer', totalW, totalH);
-        this.iceContainer.setPosition(0, -35, 0);
+        this.iceContainer.setPosition(0, -50, 0);
         this.node.addChild(this.iceContainer);
-
-        // 5. 棋盘动物元素容器
         this.boardContainer = this.createUINode('BoardContainer', totalW, totalH);
-        this.boardContainer.setPosition(0, -35, 0);
+        this.boardContainer.setPosition(0, -50, 0);
         this.node.addChild(this.boardContainer);
-
-        // 5.5 荆棘藤蔓容器层 (锁在动物身上，处于最上层)
         this.vineContainer = this.createUINode('VineContainer', totalW, totalH);
-        this.vineContainer.setPosition(0, -35, 0);
+        this.vineContainer.setPosition(0, -50, 0);
         this.node.addChild(this.vineContainer);
-
-        // 监听全局触摸
         this.boardContainer.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
         this.boardContainer.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
         this.boardContainer.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.boardContainer.on(Node.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
 
-        // 6. 浮动连击/赞美飘字节点 (Combo Banner)
-        this.bannerNode = this.createUINode('BannerNode', 440, 84);
-        this.bannerNode.setPosition(0, 75, 0);
+        const tip = panel(this.node, 'TipPanel', 0, -474, 610, 66,
+            new Color(255, 247, 221, 235), new Color(255, 209, 138));
+        addLabel(tip, 'TipText', '三连消除 · 四连得道具 · 五连得彩鸟', 24, ink, 0, 0, 570, 42);
+
+        this.bannerNode = panel(this.node, 'BannerNode', 0, 65, 440, 82,
+            new Color(255, 118, 104), new Color(255, 239, 177));
         this.bannerNode.setScale(0, 0, 1);
+        this.bannerLabel = addLabel(this.bannerNode, 'BannerText', '', 29, white, 0, 0, 410, 58);
 
-        const bannerG = this.bannerNode.addComponent(Graphics);
-        bannerG.fillColor = new Color(255, 75, 95);
-        bannerG.roundRect(-210, -40, 420, 80, 24);
-        bannerG.fill();
-        bannerG.strokeColor = new Color(255, 225, 90);
-        bannerG.lineWidth = 4;
-        bannerG.stroke();
-
-        const bannerTextNode = this.createUINode('BannerText', 400, 60);
-        this.bannerLabel = bannerTextNode.addComponent(Label);
-        this.bannerLabel.fontSize = 28;
-        this.bannerLabel.color = Color.WHITE;
-        this.bannerLabel.isBold = true;
-        this.bannerNode.addChild(bannerTextNode);
-        this.node.addChild(this.bannerNode);
-
-        // 7. 结算弹窗模态层
         this.modalNode = this.createUINode('ModalNode', 750, 1334);
         this.modalNode.active = false;
         this.node.addChild(this.modalNode);
@@ -568,7 +478,7 @@ export class GameManager extends Component {
         this.updateUI();
         AudioService.playWin();
 
-        this.bannerLabel.string = '❄️ 冰块全清！得分+2500 步数+5！';
+        this.bannerLabel.string = '冰块全清！奖励 5 步';
         Tween.stopAllByTarget(this.bannerNode);
         this.bannerNode.setScale(0, 0, 1);
         tween(this.bannerNode)
@@ -615,10 +525,16 @@ export class GameManager extends Component {
     }
 
     private updateUI() {
-        if (this.titleLabel) this.titleLabel.string = `✨ 第 ${this.currentLevel} 关 · 开心消消乐 ✨`;
-        if (this.movesLabel) this.movesLabel.string = `⚡ 步数: ${this.remainingMoves}`;
-        if (this.iceLabel) this.iceLabel.string = `❄️ 冰块: ${this.totalIceCount}`;
-        if (this.scoreLabel) this.scoreLabel.string = `⭐ 得分: ${this.score} / ${this.targetScore}`;
+        if (this.titleLabel) this.titleLabel.string = `第 ${this.currentLevel} 关`;
+        if (this.movesLabel) this.movesLabel.string = String(this.remainingMoves);
+        if (this.iceLabel) this.iceLabel.string = String(this.totalIceCount);
+        if (this.scoreLabel) this.scoreLabel.string = this.score.toLocaleString();
+        if (this.goalLabel) this.goalLabel.string = `目标 ${this.targetScore.toLocaleString()}`;
+        if (this.progressFill) {
+            const levelStart = this.targetScore - GAME_CONFIG.TARGET_SCORE;
+            const progress = (this.score - levelStart) / GAME_CONFIG.TARGET_SCORE;
+            this.progressFill.setScale(Math.max(0.01, Math.min(1, progress)), 1, 1);
+        }
     }
 
     // ==================== 触摸与滑动手势交互 ====================
@@ -786,7 +702,7 @@ export class GameManager extends Component {
         this.currentCombo = 0;
         this.updateUI();
 
-        // 如果是特效双组合，优先执行特效组合爆发
+        // 道具交换直接触发，双道具组合优先结算。
         if (isSpecialCombo) {
             await this.executeSpecialCombo(tile1, tile2);
             // 特殊消除完毕后，立即进行重力下落并填补空缺
@@ -802,15 +718,14 @@ export class GameManager extends Component {
     }
 
     /**
-     * 判断是否是双特殊元素交换
+     * 独立道具和任意相邻棋子交换都能触发。
      */
     private checkSpecialCombo(t1: TileItem, t2: TileItem): boolean {
-        return (t1.data.special === SpecialType.RAINBOW || t2.data.special === SpecialType.RAINBOW) ||
-               (t1.data.special !== SpecialType.NONE && t2.data.special !== SpecialType.NONE);
+        return t1.data.special !== SpecialType.NONE || t2.data.special !== SpecialType.NONE;
     }
 
     /**
-     * 执行双特殊元素互换的爆炸效果
+     * 执行独立道具或双道具组合效果。
      */
     private async executeSpecialCombo(t1: TileItem, t2: TileItem) {
         const s1 = t1.data.special;
@@ -826,27 +741,41 @@ export class GameManager extends Component {
                 }
             }
         }
-        // 5. 魔力鸟 + 条纹动物：全屏同色动物全部转变为条纹，并同时触发
+        // 彩鸟 + 方向道具：该方向的光束扫过全棋盘。
         else if ((s1 === SpecialType.RAINBOW && (s2 === SpecialType.HORIZONTAL || s2 === SpecialType.VERTICAL)) ||
                  (s2 === SpecialType.RAINBOW && (s1 === SpecialType.HORIZONTAL || s1 === SpecialType.VERTICAL))) {
             AudioService.playRainbow();
             const stripeTile = s1 === SpecialType.RAINBOW ? t2 : t1;
-            const targetColor = stripeTile.data.type;
-            toEliminate.add(t1.data);
-            toEliminate.add(t2.data);
             for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
                 for (let c = 0; c < GAME_CONFIG.COLS; c++) {
                     const item = this.gridData[r][c];
-                    if (item && item.type === targetColor) {
-                        item.special = Math.random() > 0.5 ? SpecialType.HORIZONTAL : SpecialType.VERTICAL;
-                        const view = this.tileItems[r][c];
-                        if (view) view.renderView();
-                        toEliminate.add(item);
+                    if (item) toEliminate.add(item);
+                }
+            }
+            if (stripeTile.data.special === SpecialType.HORIZONTAL) {
+                for (let r = 0; r < GAME_CONFIG.ROWS; r++) this.playLineSweep(r, 0, true);
+            } else {
+                for (let c = 0; c < GAME_CONFIG.COLS; c++) this.playLineSweep(0, c, false);
+            }
+        }
+        // 彩鸟 + 炸弹：双重范围爆发，不依赖炸弹内部的动物类型。
+        else if ((s1 === SpecialType.RAINBOW && s2 === SpecialType.BOMB) ||
+                 (s2 === SpecialType.RAINBOW && s1 === SpecialType.BOMB)) {
+            AudioService.playRainbow();
+            const bomb = s1 === SpecialType.BOMB ? t1 : t2;
+            toEliminate.add(t1.data);
+            toEliminate.add(t2.data);
+            for (let dr = -2; dr <= 2; dr++) {
+                for (let dc = -2; dc <= 2; dc++) {
+                    const row = bomb.row + dr, col = bomb.col + dc;
+                    if (row >= 0 && row < GAME_CONFIG.ROWS && col >= 0 && col < GAME_CONFIG.COLS) {
+                        const item = this.gridData[row][col];
+                        if (item) toEliminate.add(item);
                     }
                 }
             }
         }
-        // 6. 魔力鸟 + 普通动物：全屏同色消除
+        // 彩鸟 + 普通动物：消除该动物的所有棋子。
         else if (s1 === SpecialType.RAINBOW || s2 === SpecialType.RAINBOW) {
             AudioService.playRainbow();
             const normalTile = s1 === SpecialType.RAINBOW ? t2 : t1;
@@ -882,6 +811,14 @@ export class GameManager extends Component {
                     }
                 }
             }
+        }
+        // 单个方向道具或炸弹：交换后立刻触发自身效果。
+        else if (s1 === SpecialType.NONE || s2 === SpecialType.NONE) {
+            const special = s1 === SpecialType.NONE ? s2 : s1;
+            if (special === SpecialType.BOMB) AudioService.playBomb();
+            else AudioService.playLineSpecial();
+            toEliminate.add(t1.data);
+            toEliminate.add(t2.data);
         }
         // 9. 条纹 + 炸弹：巨型十字消除 (3行 + 3列)
         else {
@@ -1087,6 +1024,9 @@ export class GameManager extends Component {
                     const item = node.addComponent(TileItem);
                     this.boardContainer.addChild(node);
                     item.init(spData);
+                    node.setScale(0.2, 0.2, 1);
+                    tween(node).to(0.22, { scale: v3(1.18, 1.18, 1) }, { easing: 'backOut' })
+                        .to(0.1, { scale: v3(1, 1, 1) }).start();
                     this.tileItems[r][c] = item;
                 }
             }
@@ -1156,7 +1096,7 @@ export class GameManager extends Component {
     private showComboFeedback(combo: number) {
         if (combo < 2) return;
 
-        const words = ['Good!', 'Great!', 'Amazing!', 'Unbelievable!', '炸裂连击!'];
+        const words = ['好棒！', '太厉害啦！', '精彩连消！', '超神连消！', '果园大丰收！'];
         const word = words[Math.min(combo - 2, words.length - 1)];
 
         this.bannerLabel.string = `${word} x${combo}`;
@@ -1191,7 +1131,7 @@ export class GameManager extends Component {
         // 步数耗尽检测
         if (this.remainingMoves <= 0) {
             this.isGameOver = true;
-            this.showEndModal(false, '💔 步数用尽', `当前已冲刺到第 ${this.currentLevel} 关\n累计得分: ${this.score}`);
+            this.showEndModal(false, '本轮挑战结束', `到达第 ${this.currentLevel} 关\n收获积分 ${this.score.toLocaleString()}`);
             return;
         }
 
@@ -1205,7 +1145,7 @@ export class GameManager extends Component {
      * 弹出关卡升级飘字横幅 (轻量提示，不打断手指操作)
      */
     private showLevelUpBanner(level: number, bonusMoves: number) {
-        this.bannerLabel.string = `🎉 第 ${level} 关达成！步数 +${bonusMoves}！`;
+        this.bannerLabel.string = `第${level}关完成 +${bonusMoves}步`;
         Tween.stopAllByTarget(this.bannerNode);
         this.bannerNode.setScale(0, 0, 1);
 
@@ -1247,7 +1187,7 @@ export class GameManager extends Component {
         // 半透明遮罩
         const mask = this.createUINode('Mask', 750, 1334);
         const maskG = mask.addComponent(Graphics);
-        maskG.fillColor = new Color(0, 0, 0, 160);
+        maskG.fillColor = new Color(53, 37, 42, 175);
         maskG.rect(-375, -667, 750, 1334);
         maskG.fill();
         this.modalNode.addChild(mask);
@@ -1255,13 +1195,19 @@ export class GameManager extends Component {
         // 对话框面板
         const panel = this.createUINode('Panel', 520, 380);
         const panelG = panel.addComponent(Graphics);
-        panelG.fillColor = Color.WHITE;
+        panelG.fillColor = new Color(146, 86, 50, 100);
+        panelG.roundRect(-260, -199, 520, 380, 32);
+        panelG.fill();
+        panelG.fillColor = new Color(255, 249, 227);
         panelG.roundRect(-260, -190, 520, 380, 28);
         panelG.fill();
 
-        panelG.strokeColor = isWin ? new Color(255, 205, 50) : new Color(200, 215, 230);
-        panelG.lineWidth = 4;
+        panelG.strokeColor = new Color(255, 192, 113);
+        panelG.lineWidth = 5;
         panelG.stroke();
+        panelG.fillColor = new Color(255, 222, 164);
+        panelG.roundRect(-240, 106, 480, 60, 22);
+        panelG.fill();
 
         // 标题
         const titleN = this.createUINode('Title', 460, 50);
@@ -1269,7 +1215,7 @@ export class GameManager extends Component {
         const titleL = titleN.addComponent(Label);
         titleL.string = title;
         titleL.fontSize = 36;
-        titleL.color = isWin ? new Color(255, 140, 0) : new Color(100, 100, 100);
+        titleL.color = new Color(166, 82, 44);
         titleL.isBold = true;
         panel.addChild(titleN);
 
@@ -1280,20 +1226,23 @@ export class GameManager extends Component {
         descL.string = desc;
         descL.fontSize = 24;
         descL.lineHeight = 34;
-        descL.color = new Color(80, 80, 80);
+        descL.color = new Color(91, 57, 37);
         panel.addChild(descN);
 
         // 按钮 1：补充 +10 步继续玩 (保留现有地图不刷新)
         const addMovesBtn = this.createUINode('AddMovesBtn', 220, 64);
         addMovesBtn.setPosition(-120, -85, 0);
         const btnG1 = addMovesBtn.addComponent(Graphics);
-        btnG1.fillColor = new Color(46, 204, 113);
+        btnG1.fillColor = new Color(232, 112, 82);
         btnG1.roundRect(-110, -32, 220, 64, 18);
         btnG1.fill();
+        btnG1.strokeColor = new Color(255, 200, 145);
+        btnG1.lineWidth = 3;
+        btnG1.stroke();
 
         const text1 = this.createUINode('BtnText1', 200, 40);
         const l1 = text1.addComponent(Label);
-        l1.string = '⚡ +10步继续';
+        l1.string = '+10 步继续';
         l1.fontSize = 24;
         l1.color = Color.WHITE;
         l1.isBold = true;
@@ -1311,13 +1260,16 @@ export class GameManager extends Component {
         const restartBtn = this.createUINode('RestartBtn', 200, 64);
         restartBtn.setPosition(130, -85, 0);
         const btnG2 = restartBtn.addComponent(Graphics);
-        btnG2.fillColor = new Color(52, 152, 219);
+        btnG2.fillColor = new Color(80, 176, 132);
         btnG2.roundRect(-100, -32, 200, 64, 18);
         btnG2.fill();
+        btnG2.strokeColor = new Color(190, 235, 174);
+        btnG2.lineWidth = 3;
+        btnG2.stroke();
 
         const text2 = this.createUINode('BtnText2', 180, 40);
         const l2 = text2.addComponent(Label);
-        l2.string = '🔄 重开新局';
+        l2.string = '重新开始';
         l2.fontSize = 24;
         l2.color = Color.WHITE;
         l2.isBold = true;

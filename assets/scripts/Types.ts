@@ -12,7 +12,7 @@ export enum SpecialType {
     HORIZONTAL = 1, // 横向消除整行
     VERTICAL = 2,   // 纵向消除整列
     BOMB = 3,       // 3x3 范围爆炸
-    RAINBOW = 4     // 魔力鸟 / 彩虹球 (消除全屏同色)
+    RAINBOW = 4     // 彩鸟 (与普通动物交换时消除全屏同种动物)
 }
 
 export interface TileData {

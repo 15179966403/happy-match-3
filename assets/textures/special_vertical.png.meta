@@ -42,11 +42,11 @@
         "trimThreshold": 1,
         "rotated": false,
         "offsetX": 0,
-        "offsetY": -3.5,
-        "trimX": 75,
-        "trimY": 15,
-        "width": 106,
-        "height": 233,
+        "offsetY": 0,
+        "trimX": 0,
+        "trimY": 0,
+        "width": 256,
+        "height": 256,
         "rawWidth": 256,
         "rawHeight": 256,
         "borderTop": 0,
@@ -60,17 +60,17 @@
         "meshType": 0,
         "vertices": {
           "rawPosition": [
-            -53,
-            -116.5,
+            -128,
+            -128,
             0,
-            53,
-            -116.5,
+            128,
+            -128,
             0,
-            -53,
-            116.5,
+            -128,
+            128,
             0,
-            53,
-            116.5,
+            128,
+            128,
             0
           ],
           "indexes": [
@@ -82,40 +82,40 @@
             3
           ],
           "uv": [
-            75,
-            241,
-            181,
-            241,
-            75,
-            8,
-            181,
-            8
+            0,
+            256,
+            256,
+            256,
+            0,
+            0,
+            256,
+            0
           ],
           "nuv": [
-            0.29296875,
-            0.03125,
-            0.70703125,
-            0.03125,
-            0.29296875,
-            0.94140625,
-            0.70703125,
-            0.94140625
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1
           ],
           "minPos": [
-            -53,
-            -116.5,
+            -128,
+            -128,
             0
           ],
           "maxPos": [
-            53,
-            116.5,
+            128,
+            128,
             0
           ]
         },
         "isUuid": true,
         "imageUuidOrDatabaseUri": "79cbc6cf-f922-41f3-b005-a34ac2ab0292@6c48a",
         "atlasUuid": "",
-        "trimType": "auto"
+        "trimType": "none"
       },
       "ver": "1.0.12",
       "imported": true,
