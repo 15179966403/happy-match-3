@@ -374,12 +374,14 @@ export class GameManager extends Component {
     }
 
     /**
-     * 对命中的坐标位置执行破冰与解开荆棘藤蔓
+     * 对命中的坐标位置执行破冰与解开藤蔓，返回本次应保留的动物。
      */
-    private async hitObstaclesAtPositions(positions: { row: number; col: number }[]) {
+    private async hitObstaclesAtPositions(positions: { row: number; col: number }[]): Promise<Set<TileData>> {
         const iceCracked: Node[] = [];
         const iceDestroyed: Node[] = [];
         const vineSnapped: Node[] = [];
+        const vineProtectedTiles = new Set<TileData>();
+        const hadIce = this.totalIceCount > 0;
 
         const handled = new Set<string>();
 
@@ -393,6 +395,8 @@ export class GameManager extends Component {
 
             // 1. 解开藤蔓
             if (this.obstacleData[r][c].vine > 0) {
+                const animal = this.gridData[r][c];
+                if (animal) vineProtectedTiles.add(animal);
                 this.obstacleData[r][c].vine = 0;
                 const vn = this.vineNodes[r][c];
                 if (vn) {
@@ -464,9 +468,10 @@ export class GameManager extends Component {
         this.updateUI();
 
         // 检查是否清空了全场所有冰块！
-        if (this.totalIceCount <= 0 && handled.size > 0 && positions.length > 0) {
+        if (hadIce && this.totalIceCount <= 0) {
             this.showIceClearBonus();
         }
+        return vineProtectedTiles;
     }
 
     /**
@@ -679,7 +684,9 @@ export class GameManager extends Component {
         const isSpecialCombo = this.checkSpecialCombo(tile1, tile2);
 
         // 3. 检测常规匹配
-        const matches = MatchLogic.findMatches(this.gridData, { row: r2, col: c2 });
+        const swappedTiles = new Set<TileData>([tile1.data, tile2.data]);
+        const matches = MatchLogic.findMatches(this.gridData)
+            .filter(group => group.tiles.some(tile => swappedTiles.has(tile)));
 
         if (!isSpecialCombo && matches.length === 0) {
             // 无效交换，弹回原位
@@ -701,16 +708,23 @@ export class GameManager extends Component {
         this.remainingMoves--;
         this.currentCombo = 0;
         this.updateUI();
+        const vineProtectedTiles = new Set<TileData>();
 
         // 彩鸟或双特殊动物组合直接触发；单个特殊动物仍需参与同种匹配。
         if (isSpecialCombo) {
-            await this.executeSpecialCombo(tile1, tile2);
+            await this.executeSpecialCombo(tile1, tile2, vineProtectedTiles);
             // 特殊消除完毕后，立即进行重力下落并填补空缺
             await this.dropAndFill();
         }
 
+        // 首轮由交换形成的匹配，特殊动物生成在参与匹配的交换落点。
+        const matchedSwapTile = !isSpecialCombo && [tile1.data, tile2.data]
+            .find(tile => matches.some(group => group.tiles.includes(tile)));
+        const matchFocus = matchedSwapTile
+            ? { row: matchedSwapTile.row, col: matchedSwapTile.col } : undefined;
+
         // 循环消除与重力下落流程
-        await this.runEliminateCycle();
+        await this.runEliminateCycle(matchFocus, vineProtectedTiles, isSpecialCombo ? undefined : swappedTiles);
 
         // 胜负与死局检测
         this.checkGameStatus();
@@ -728,7 +742,7 @@ export class GameManager extends Component {
     /**
      * 执行彩鸟或双特殊动物组合效果。
      */
-    private async executeSpecialCombo(t1: TileItem, t2: TileItem) {
+    private async executeSpecialCombo(t1: TileItem, t2: TileItem, vineProtectedTiles: Set<TileData>) {
         const s1 = t1.data.special;
         const s2 = t2.data.special;
         const toEliminate = new Set<TileData>();
@@ -753,7 +767,7 @@ export class GameManager extends Component {
                 for (let c = 0; c < GAME_CONFIG.COLS; c++) {
                     const item = this.gridData[r][c];
                     if (item && item.type === stripeTile.data.type && item.special !== SpecialType.RAINBOW) {
-                        if (item.special === SpecialType.NONE) {
+                        if (item.special === SpecialType.NONE && this.obstacleData[r][c].vine === 0) {
                             item.special = stripeTile.data.special;
                             this.tileItems[r][c]?.renderView();
                         }
@@ -773,7 +787,7 @@ export class GameManager extends Component {
                 for (let c = 0; c < GAME_CONFIG.COLS; c++) {
                     const item = this.gridData[r][c];
                     if (item && item.type === bomb.data.type && item.special !== SpecialType.RAINBOW) {
-                        if (item.special === SpecialType.NONE) {
+                        if (item.special === SpecialType.NONE && this.obstacleData[r][c].vine === 0) {
                             item.special = SpecialType.BOMB;
                             this.tileItems[r][c]?.renderView();
                         }
@@ -841,27 +855,30 @@ export class GameManager extends Component {
         }
 
         // 连锁扩散（如果有炸弹或条纹被卷入，继续引爆）
-        const allToEliminate = MatchLogic.expandElimination(this.gridData, Array.from(toEliminate));
-        this.playSpecialVisuals(Array.from(allToEliminate));
+        const allToEliminate = MatchLogic.expandElimination(this.gridData, Array.from(toEliminate),
+            tile => !vineProtectedTiles.has(tile) && this.obstacleData[tile.row][tile.col].vine === 0);
 
         // 攻击命中的冰块与藤蔓
         const hitPositions: { row: number; col: number }[] = [];
         allToEliminate.forEach(t => hitPositions.push({ row: t.row, col: t.col }));
-        await this.hitObstaclesAtPositions(hitPositions);
+        const newlyProtected = await this.hitObstaclesAtPositions(hitPositions);
+        newlyProtected.forEach(tile => vineProtectedTiles.add(tile));
+        const eliminated = Array.from(allToEliminate).filter(tile => !vineProtectedTiles.has(tile));
+        this.playSpecialVisuals(eliminated);
 
         // 累积分数
-        const addScore = allToEliminate.size * 100;
+        const addScore = eliminated.length * 100;
         this.score += addScore;
         this.updateUI();
 
         // 弹出酷炫赞美飘字
-        if (allToEliminate.size >= 12) {
+        if (eliminated.length >= 12) {
             this.showComboFeedback(4); // Amazing! / Unbelievable!
-        } else if (allToEliminate.size >= 6) {
+        } else if (eliminated.length >= 6) {
             this.showComboFeedback(3); // Great!
         }
 
-        await this.eliminateTiles(Array.from(allToEliminate));
+        await this.eliminateTiles(eliminated);
     }
 
     /** 道具触发时的棋盘光效。与图标分开绘制，保证消除方向清楚可见。 */
@@ -960,11 +977,18 @@ export class GameManager extends Component {
     /**
      * 循环检测消除、重力下落、连锁判定
      */
-    private async runEliminateCycle() {
+    private async runEliminateCycle(
+        focusPos?: { row: number; col: number },
+        vineProtectedTiles = new Set<TileData>(),
+        firstSwapTiles?: ReadonlySet<TileData>
+    ) {
         let hasCycle = true;
 
         while (hasCycle) {
-            const matches = MatchLogic.findMatches(this.gridData);
+            const matches = MatchLogic.findMatches(this.gridData, focusPos, vineProtectedTiles)
+                .filter(group => !firstSwapTiles || group.tiles.some(tile => firstSwapTiles!.has(tile)));
+            focusPos = undefined; // 下落连锁不再沿用玩家交换位置
+            firstSwapTiles = undefined;
             if (matches.length === 0) {
                 hasCycle = false;
                 break;
@@ -990,20 +1014,23 @@ export class GameManager extends Component {
             }
 
             // 连锁扩散（如果有条纹或炸弹）
-            const allToEliminate = MatchLogic.expandElimination(this.gridData, matchedTiles);
-            this.playSpecialVisuals(Array.from(allToEliminate));
+            const allToEliminate = MatchLogic.expandElimination(this.gridData, matchedTiles,
+                tile => !vineProtectedTiles.has(tile) && this.obstacleData[tile.row][tile.col].vine === 0);
 
             // 攻击命中的冰块与藤蔓
             const hitPositions: { row: number; col: number }[] = [];
             allToEliminate.forEach(t => hitPositions.push({ row: t.row, col: t.col }));
-            await this.hitObstaclesAtPositions(hitPositions);
+            const newlyProtected = await this.hitObstaclesAtPositions(hitPositions);
+            newlyProtected.forEach(tile => vineProtectedTiles.add(tile));
+            const eliminated = Array.from(allToEliminate).filter(tile => !vineProtectedTiles.has(tile));
+            this.playSpecialVisuals(eliminated);
 
             // 执行消除动画并加分
-            const baseScore = allToEliminate.size * 100 * this.currentCombo;
+            const baseScore = eliminated.length * 100 * this.currentCombo;
             this.score += baseScore;
             this.updateUI();
 
-            await this.eliminateTiles(Array.from(allToEliminate));
+            await this.eliminateTiles(eliminated);
 
             // 生成新合成的特殊元素
             for (const sp of newSpecials) {

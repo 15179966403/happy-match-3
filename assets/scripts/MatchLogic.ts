@@ -68,7 +68,11 @@ export class MatchLogic {
     /**
      * 检测棋盘中是否存在任何可消匹配 (3连及以上)
      */
-    public static findMatches(grid: (TileData | null)[][], focusPos?: { row: number; col: number }): MatchGroup[] {
+    public static findMatches(
+        grid: (TileData | null)[][],
+        focusPos?: { row: number; col: number },
+        protectedTiles?: ReadonlySet<TileData>
+    ): MatchGroup[] {
         const rows = GAME_CONFIG.ROWS;
         const cols = GAME_CONFIG.COLS;
 
@@ -78,7 +82,7 @@ export class MatchLogic {
             let currentLine: TileData[] = [];
             for (let c = 0; c < cols; c++) {
                 const tile = grid[r][c];
-                if (!tile || tile.special === SpecialType.RAINBOW) {
+                if (!tile || tile.special === SpecialType.RAINBOW || protectedTiles?.has(tile)) {
                     if (currentLine.length >= 3) hLines.push([...currentLine]);
                     currentLine = [];
                     continue;
@@ -99,7 +103,7 @@ export class MatchLogic {
             let currentLine: TileData[] = [];
             for (let r = 0; r < rows; r++) {
                 const tile = grid[r][c];
-                if (!tile || tile.special === SpecialType.RAINBOW) {
+                if (!tile || tile.special === SpecialType.RAINBOW || protectedTiles?.has(tile)) {
                     if (currentLine.length >= 3) vLines.push([...currentLine]);
                     currentLine = [];
                     continue;
@@ -145,8 +149,9 @@ export class MatchLogic {
                 if (line.length >= 5) special = SpecialType.RAINBOW;
                 else if (line.length === 4) special = SpecialType.HORIZONTAL;
 
+                const middle = line[Math.floor((line.length - 1) / 2)];
                 const target = (focusPos && line.some(t => t.row === focusPos.row && t.col === focusPos.col))
-                    ? focusPos : { row: line[1].row, col: line[1].col };
+                    ? focusPos : { row: middle.row, col: middle.col };
 
                 groups.push({
                     tiles: line,
@@ -166,8 +171,9 @@ export class MatchLogic {
                 if (line.length >= 5) special = SpecialType.RAINBOW;
                 else if (line.length === 4) special = SpecialType.VERTICAL;
 
+                const middle = line[Math.floor((line.length - 1) / 2)];
                 const target = (focusPos && line.some(t => t.row === focusPos.row && t.col === focusPos.col))
-                    ? focusPos : { row: line[1].row, col: line[1].col };
+                    ? focusPos : { row: middle.row, col: middle.col };
 
                 groups.push({
                     tiles: line,
@@ -204,7 +210,7 @@ export class MatchLogic {
         grid[r1][c1] = t1;
         grid[r2][c2] = t2;
 
-        return matches.length > 0;
+        return matches.some(group => group.tiles.includes(t1) || group.tiles.includes(t2));
     }
 
     /**
@@ -230,7 +236,8 @@ export class MatchLogic {
      */
     public static expandElimination(
         grid: (TileData | null)[][],
-        initialTiles: TileData[]
+        initialTiles: TileData[],
+        canActivate: (tile: TileData) => boolean = () => true
     ): Set<TileData> {
         const toEliminate = new Set<TileData>();
         const queue: TileData[] = [...initialTiles];
@@ -239,6 +246,7 @@ export class MatchLogic {
             const current = queue.shift()!;
             if (toEliminate.has(current)) continue;
             toEliminate.add(current);
+            if (!canActivate(current)) continue;
 
             // 触发横向条纹
             if (current.special === SpecialType.HORIZONTAL) {
