@@ -27,3 +27,9 @@
 - `assets/scripts/TileItem.ts`：单个棋子的显示与移动动画。
 - `assets/scripts/ArtFactory.ts`、`VisualAssets.ts`：贴图预加载和 SpriteFrame 创建。
 - `assets/scripts/AudioService.ts`：程序生成音效。
+
+## 规划文档
+
+- [技术路线图](docs/TECHNICAL_ROADMAP.md)：规则引擎、关卡数据、资源与质量体系。
+- [项目迭代计划](docs/ITERATION_PLAN.md)：阶段、里程碑、关卡节奏与发布门槛。
+- [用户故事](docs/USER_STORIES.md)：玩家与开发者需求及可验证的验收条件。
