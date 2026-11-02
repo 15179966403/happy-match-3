@@ -1,9 +1,10 @@
-import { _decorator, Component, Node, Graphics, UITransform, Label, Color, v3, Vec3, EventTouch, tween, Tween, Layers, Camera, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Graphics, UITransform, Label, Color, v3, Vec3, EventTouch, tween, Tween, Layers, Camera, Sprite, SpriteFrame, UIOpacity } from 'cc';
 import { AnimalType, SpecialType, TileData, MatchGroup, ObstacleData, GAME_CONFIG } from './Types';
 import { TileItem } from './TileItem';
 import { MatchLogic } from './MatchLogic';
 import { AudioService } from './AudioService';
 import { ArtFactory } from './ArtFactory';
+import { SpecialTileAssets } from './SpecialTileAssets';
 
 const { ccclass } = _decorator;
 
@@ -67,6 +68,14 @@ export class GameManager extends Component {
     }
 
     onLoad() {
+        SpecialTileAssets.init(() => {
+            ArtFactory.invalidateSpecialSprites();
+            for (const row of this.tileItems) {
+                for (const tile of row) {
+                    if (tile && tile.node.isValid && tile.data.special !== SpecialType.NONE) tile.renderView();
+                }
+            }
+        });
         this.node.layer = Layers.Enum.UI_2D;
         const rootTransform = this.node.getComponent(UITransform) || this.node.addComponent(UITransform);
         rootTransform.setContentSize(750, 1334);
@@ -897,6 +906,7 @@ export class GameManager extends Component {
 
         // 连锁扩散（如果有炸弹或条纹被卷入，继续引爆）
         const allToEliminate = MatchLogic.expandElimination(this.gridData, Array.from(toEliminate));
+        this.playSpecialVisuals(Array.from(allToEliminate));
 
         // 攻击命中的冰块与藤蔓
         const hitPositions: { row: number; col: number }[] = [];
@@ -916,6 +926,99 @@ export class GameManager extends Component {
         }
 
         await this.eliminateTiles(Array.from(allToEliminate));
+    }
+
+    /** 道具触发时的棋盘光效。与图标分开绘制，保证消除方向清楚可见。 */
+    private playSpecialVisuals(tiles: TileData[]) {
+        const rows = new Set<number>();
+        const cols = new Set<number>();
+        const rainbow = tiles.find(t => t.special === SpecialType.RAINBOW);
+
+        for (const tile of tiles) {
+            if (tile.special === SpecialType.HORIZONTAL) rows.add(tile.row);
+            if (tile.special === SpecialType.VERTICAL) cols.add(tile.col);
+            if (tile.special === SpecialType.BOMB) this.playBurstRing(tile.row, tile.col, new Color(255, 166, 72, 230));
+        }
+        for (const row of rows) this.playLineSweep(row, 0, true);
+        for (const col of cols) this.playLineSweep(0, col, false);
+        if (rainbow) this.playRainbowBurst(rainbow, tiles);
+    }
+
+    private playLineSweep(row: number, col: number, horizontal: boolean) {
+        const pos = TileItem.getPos(
+            horizontal ? row : (GAME_CONFIG.ROWS - 1) / 2,
+            horizontal ? (GAME_CONFIG.COLS - 1) / 2 : col
+        );
+        const length = (horizontal ? GAME_CONFIG.COLS : GAME_CONFIG.ROWS) *
+            (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP);
+        const flash = this.createUINode(horizontal ? 'HorizontalSweep' : 'VerticalSweep', length, length);
+        flash.setPosition(pos);
+        this.boardContainer.addChild(flash);
+        const g = flash.addComponent(Graphics);
+        const half = length / 2;
+        const drawLine = (width: number, color: Color) => {
+            g.lineWidth = width;
+            g.strokeColor = color;
+            g.moveTo(horizontal ? -half : 0, horizontal ? 0 : -half);
+            g.lineTo(horizontal ? half : 0, horizontal ? 0 : half);
+            g.stroke();
+        };
+        drawLine(31, new Color(68, 222, 255, 75));
+        drawLine(14, new Color(54, 217, 255, 210));
+        drawLine(5, new Color(255, 255, 255, 255));
+        const alpha = flash.addComponent(UIOpacity);
+        flash.setScale(horizontal ? 0.03 : 1, horizontal ? 1 : 0.03, 1);
+        tween(flash)
+            .to(0.15, { scale: v3(1, 1, 1) }, { easing: 'quadOut' })
+            .delay(0.25)
+            .call(() => flash.destroy())
+            .start();
+        tween(alpha).delay(0.12).to(0.25, { opacity: 0 }).start();
+    }
+
+    private playBurstRing(row: number, col: number, color: Color) {
+        const flash = this.createUINode('SpecialBurst', GAME_CONFIG.TILE_SIZE * 2, GAME_CONFIG.TILE_SIZE * 2);
+        flash.setPosition(TileItem.getPos(row, col));
+        this.boardContainer.addChild(flash);
+        const g = flash.addComponent(Graphics);
+        g.lineWidth = 9;
+        g.strokeColor = color;
+        g.circle(0, 0, GAME_CONFIG.TILE_SIZE * 0.43);
+        g.stroke();
+        g.lineWidth = 3;
+        g.strokeColor = new Color(255, 255, 255, 220);
+        g.circle(0, 0, GAME_CONFIG.TILE_SIZE * 0.55);
+        g.stroke();
+        const alpha = flash.addComponent(UIOpacity);
+        flash.setScale(0.5, 0.5, 1);
+        tween(flash).to(0.36, { scale: v3(2, 2, 1) }, { easing: 'quadOut' })
+            .call(() => flash.destroy()).start();
+        tween(alpha).to(0.36, { opacity: 0 }).start();
+    }
+
+    private playRainbowBurst(origin: TileData, targets: TileData[]) {
+        const flash = this.createUINode('RainbowRays', 0, 0);
+        this.boardContainer.addChild(flash);
+        const g = flash.addComponent(Graphics);
+        const start = TileItem.getPos(origin.row, origin.col);
+        const colors = [
+            new Color(255, 111, 159, 175), new Color(255, 205, 84, 175),
+            new Color(107, 224, 149, 175), new Color(96, 202, 255, 175),
+            new Color(185, 139, 255, 175),
+        ];
+        targets.forEach((tile, index) => {
+            if (tile === origin) return;
+            const end = TileItem.getPos(tile.row, tile.col);
+            g.lineWidth = 3.5;
+            g.strokeColor = colors[index % colors.length];
+            g.moveTo(start.x, start.y);
+            g.lineTo(end.x, end.y);
+            g.stroke();
+        });
+        const alpha = flash.addComponent(UIOpacity);
+        tween(alpha).delay(0.05).to(0.36, { opacity: 0 })
+            .call(() => flash.destroy()).start();
+        this.playBurstRing(origin.row, origin.col, new Color(255, 225, 104, 240));
     }
 
     /**
@@ -952,6 +1055,7 @@ export class GameManager extends Component {
 
             // 连锁扩散（如果有条纹或炸弹）
             const allToEliminate = MatchLogic.expandElimination(this.gridData, matchedTiles);
+            this.playSpecialVisuals(Array.from(allToEliminate));
 
             // 攻击命中的冰块与藤蔓
             const hitPositions: { row: number; col: number }[] = [];

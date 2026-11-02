@@ -10,6 +10,12 @@ import { SpecialTileAssets } from './SpecialTileAssets';
 export class ArtFactory {
     private static cache: Map<string, SpriteFrame> = new Map();
 
+    public static invalidateSpecialSprites() {
+        for (const key of this.cache.keys()) {
+            if (/_[1-4]$/.test(key)) this.cache.delete(key);
+        }
+    }
+
     /**
      * 获取指定动物与特效的高清精致 SpriteFrame
      */
@@ -31,7 +37,7 @@ export class ArtFactory {
         // 绘制果冻动物
         if (special === SpecialType.RAINBOW) {
             this.drawRainbowBird(ctx, size);
-        } else {
+        } else if (special !== SpecialType.BOMB) {
             this.drawJellyAnimal(ctx, size, type);
         }
 
@@ -768,6 +774,8 @@ export class ArtFactory {
         const aiImg = SpecialTileAssets.getImage('HORIZONTAL');
         if (aiImg) {
             ctx.drawImage(aiImg, 0, 0, size, size);
+            ctx.restore();
+            return;
         }
 
         // 2. 腰间极光悬浮能量带 (轻盈透明，位于动物腰腹部，不遮挡可爱面部表情)
@@ -812,6 +820,8 @@ export class ArtFactory {
         const aiImg = SpecialTileAssets.getImage('VERTICAL');
         if (aiImg) {
             ctx.drawImage(aiImg, 0, 0, size, size);
+            ctx.restore();
+            return;
         }
 
         // 2. 纵向贯穿极光流束 (柔和轻透，不破坏整体萌宠感)
@@ -856,6 +866,8 @@ export class ArtFactory {
         const aiImg = SpecialTileAssets.getImage('BOMB');
         if (aiImg) {
             ctx.drawImage(aiImg, 0, 0, size, size);
+            ctx.restore();
+            return;
         }
 
         // 2. 8 瓣旋转烈焰能量波冲击圈 (Radiating Flame Shockwave)
