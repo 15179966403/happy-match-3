@@ -191,7 +191,9 @@ export class MatchLogic {
     /**
      * 判断两个相邻格子交换后是否会有匹配或特殊合成
      */
-    public static canSwap(grid: (TileData | null)[][], r1: number, c1: number, r2: number, c2: number): boolean {
+    public static canSwap(grid: (TileData | null)[][], r1: number, c1: number, r2: number, c2: number,
+                          isLocked: (row: number, col: number) => boolean = () => false): boolean {
+        if (isLocked(r1, c1) || isLocked(r2, c2)) return false;
         const t1 = grid[r1][c1];
         const t2 = grid[r2][c2];
         if (!t1 || !t2) return false;
@@ -216,16 +218,17 @@ export class MatchLogic {
     /**
      * 检测棋盘是否还有可走有效步 (防死局检测)
      */
-    public static hasValidMove(grid: (TileData | null)[][]): boolean {
+    public static hasValidMove(grid: (TileData | null)[][],
+                               isLocked: (row: number, col: number) => boolean = () => false): boolean {
         const rows = GAME_CONFIG.ROWS;
         const cols = GAME_CONFIG.COLS;
 
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 // 尝试向右交换
-                if (c + 1 < cols && this.canSwap(grid, r, c, r, c + 1)) return true;
+                if (c + 1 < cols && this.canSwap(grid, r, c, r, c + 1, isLocked)) return true;
                 // 尝试向上交换
-                if (r + 1 < rows && this.canSwap(grid, r, c, r + 1, c)) return true;
+                if (r + 1 < rows && this.canSwap(grid, r, c, r + 1, c, isLocked)) return true;
             }
         }
         return false;
@@ -342,11 +345,16 @@ export class MatchLogic {
     /**
      * 洗牌算法：将棋盘现有元素随机打乱，直到有解且无现成3消
      */
-    public static shuffle(grid: (TileData | null)[][]): void {
+    public static shuffle(grid: (TileData | null)[][],
+                          isLocked: (row: number, col: number) => boolean = () => false): void {
         const tiles: TileData[] = [];
+        const positions: { row: number; col: number }[] = [];
         for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
             for (let c = 0; c < GAME_CONFIG.COLS; c++) {
-                if (grid[r][c]) tiles.push(grid[r][c]!);
+                if (grid[r][c] && !isLocked(r, c)) {
+                    tiles.push(grid[r][c]!);
+                    positions.push({ row: r, col: c });
+                }
             }
         }
 
@@ -361,16 +369,14 @@ export class MatchLogic {
             }
 
             // 重新填入网格
-            let idx = 0;
-            for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
-                for (let c = 0; c < GAME_CONFIG.COLS; c++) {
-                    const t = tiles[idx++];
-                    t.row = r;
-                    t.col = c;
-                    grid[r][c] = t;
-                }
+            for (let idx = 0; idx < positions.length; idx++) {
+                const { row, col } = positions[idx];
+                const t = tiles[idx];
+                t.row = row;
+                t.col = col;
+                grid[row][col] = t;
             }
             attempts++;
-        } while ((this.findMatches(grid).length > 0 || !this.hasValidMove(grid)) && attempts < 100);
+        } while ((this.findMatches(grid).length > 0 || !this.hasValidMove(grid, isLocked)) && attempts < 100);
     }
 }

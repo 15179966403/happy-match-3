@@ -5,6 +5,7 @@ import { MatchLogic } from './MatchLogic';
 import { AudioService } from './AudioService';
 import { ArtFactory } from './ArtFactory';
 import { VisualAssets } from './VisualAssets';
+import { LevelConfig, LevelState, LEVELS, createLevelState, getLevel, goalName, settleAction } from './LevelRules';
 
 const { ccclass } = _decorator;
 
@@ -18,10 +19,11 @@ export class GameManager extends Component {
     // UI 组件
     private titleLabel: Label = null!;
     private scoreLabel: Label = null!;
-    private movesLabel: Label = null!;
-    private iceLabel: Label = null!;
+    private healthLabel: Label = null!;
+    private dangerLabel: Label = null!;
     private goalLabel: Label = null!;
     private progressFill: Node = null!;
+    private healthFill: Node = null!;
     private bannerNode: Node = null!;
     private bannerLabel: Label = null!;
     private modalNode: Node = null!;
@@ -34,11 +36,12 @@ export class GameManager extends Component {
     private vineNodes: (Node | null)[][] = [];
     private totalIceCount: number = 0;
 
-    // 游戏数值与连续无尽闯关
+    // 游戏数值与血条关卡
     private currentLevel: number = 1;
-    private targetScore: number = GAME_CONFIG.TARGET_SCORE;
+    private levelConfig: LevelConfig = getLevel(1);
+    private levelState: LevelState = createLevelState(this.levelConfig);
+    private pendingGoalProgress: number = 0;
     private score: number = 0;
-    private remainingMoves: number = GAME_CONFIG.MAX_MOVES;
     private isBusy: boolean = false;
     private isGameOver: boolean = false;
     private currentCombo: number = 0;
@@ -149,8 +152,8 @@ export class GameManager extends Component {
         hud.setPosition(0, 406, 0);
         this.node.addChild(hud);
         const cardSpecs: Array<[string, number, Color, Color, string]> = [
-            ['MovesCard', -222, new Color(255, 246, 223), new Color(255, 185, 87), '剩余步数'],
-            ['IceCard', 0, new Color(236, 250, 255), new Color(113, 201, 237), '冰块目标'],
+            ['HealthCard', -222, new Color(255, 239, 237), new Color(235, 123, 122), '生命值'],
+            ['DangerCard', 0, new Color(255, 246, 223), new Color(255, 185, 87), '距离受伤'],
             ['ScoreCard', 222, new Color(255, 241, 248), new Color(255, 159, 181), '当前积分'],
         ];
         const cards = cardSpecs.map(([name, x, fill, edge, caption]) => {
@@ -158,9 +161,23 @@ export class GameManager extends Component {
             addLabel(card, `${name}Caption`, caption, 20, new Color(137, 91, 69), 0, 23, 185, 27);
             return card;
         });
-        this.movesLabel = addLabel(cards[0], 'MovesValue', '35', 36, new Color(218, 106, 46), 0, -15, 185, 46);
-        this.iceLabel = addLabel(cards[1], 'IceValue', '0', 36, new Color(43, 137, 184), 0, -15, 185, 46);
+        this.healthLabel = addLabel(cards[0], 'HealthValue', '5 / 5', 31, new Color(210, 75, 85), 0, -11, 185, 42);
+        this.dangerLabel = addLabel(cards[1], 'DangerValue', '4 次行动', 28, new Color(218, 106, 46), 0, -15, 185, 46);
         this.scoreLabel = addLabel(cards[2], 'ScoreValue', '0', 34, new Color(209, 87, 126), 0, -15, 185, 46);
+        const healthTrack = this.createUINode('HealthTrack', 152, 10);
+        healthTrack.setPosition(0, -37, 0);
+        const healthTrackG = healthTrack.addComponent(Graphics);
+        healthTrackG.fillColor = new Color(223, 176, 168);
+        healthTrackG.roundRect(-76, -5, 152, 10, 5);
+        healthTrackG.fill();
+        cards[0].addChild(healthTrack);
+        this.healthFill = this.createUINode('HealthFill', 148, 8);
+        this.healthFill.setPosition(-74, -37, 0);
+        const healthFillG = this.healthFill.addComponent(Graphics);
+        healthFillG.fillColor = new Color(243, 91, 100);
+        healthFillG.roundRect(0, -4, 148, 8, 4);
+        healthFillG.fill();
+        cards[0].addChild(this.healthFill);
 
         const progressPanel = panel(this.node, 'ProgressPanel', 0, 311, 610, 54,
             new Color(255, 250, 230, 245), new Color(255, 219, 145));
@@ -178,7 +195,7 @@ export class GameManager extends Component {
         fillG.roundRect(0, -8, 334, 16, 8);
         fillG.fill();
         progressPanel.addChild(this.progressFill);
-        this.goalLabel = addLabel(progressPanel, 'GoalLabel', '目标 6000', 20, ink, 205, 0, 170, 34);
+        this.goalLabel = addLabel(progressPanel, 'GoalLabel', '目标 0 / 12', 20, ink, 205, 0, 170, 34);
 
         const totalW = GAME_CONFIG.COLS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 24;
         const totalH = GAME_CONFIG.ROWS * (GAME_CONFIG.TILE_SIZE + GAME_CONFIG.TILE_GAP) + 24;
@@ -224,7 +241,7 @@ export class GameManager extends Component {
 
         const tip = panel(this.node, 'TipPanel', 0, -474, 610, 66,
             new Color(255, 247, 221, 235), new Color(255, 209, 138));
-        addLabel(tip, 'TipText', '三连消除 · 四连得道具 · 五连得彩鸟', 24, ink, 0, 0, 570, 42);
+        addLabel(tip, 'TipText', '达成目标即胜利 · 行动累积会受伤', 24, ink, 0, 0, 570, 42);
 
         this.bannerNode = panel(this.node, 'BannerNode', 0, 65, 440, 82,
             new Color(255, 118, 104), new Color(255, 239, 177));
@@ -240,11 +257,17 @@ export class GameManager extends Component {
      * 开启新一局游戏
      */
     public startNewGame() {
-        this.currentLevel = 1;
-        this.targetScore = GAME_CONFIG.TARGET_SCORE;
+        this.startLevel(1);
+    }
+
+    private startLevel(level: number) {
+        this.currentLevel = level;
+        this.levelConfig = getLevel(level);
+        this.levelState = createLevelState(this.levelConfig);
+        this.pendingGoalProgress = 0;
         this.score = 0;
-        this.remainingMoves = GAME_CONFIG.MAX_MOVES;
         this.currentCombo = 0;
+        this.isBusy = false;
         this.isGameOver = false;
         this.modalNode.active = false;
 
@@ -263,7 +286,9 @@ export class GameManager extends Component {
         }
 
         // 初始化棋盘数据模型
-        this.gridData = MatchLogic.initBoard();
+        do {
+            this.gridData = MatchLogic.initBoard();
+        } while (!MatchLogic.hasValidMove(this.gridData, (r, c) => this.obstacleData[r][c].vine > 0));
 
         // 实例化视图
         for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
@@ -301,41 +326,9 @@ export class GameManager extends Component {
             }
         }
 
-        if (level === 1) {
-            // 第 1 关：底部薄冰阵，中间两处荆棘
-            for (let c = 1; c <= 6; c++) {
-                this.setIce(0, c, 1);
-                this.setIce(1, c, 1);
-            }
-            this.setVine(3, 2);
-            this.setVine(3, 5);
-        } else if (level === 2) {
-            // 第 2 关：四角坚冰阵，中间四角荆棘
-            const corners = [
-                [0, 0], [0, 1], [1, 0], [1, 1],
-                [0, 6], [0, 7], [1, 6], [1, 7],
-                [6, 0], [6, 1], [7, 0], [7, 1],
-                [6, 6], [6, 7], [7, 6], [7, 7]
-            ];
-            corners.forEach(([r, c]) => this.setIce(r, c, 2));
-            this.setVine(3, 3);
-            this.setVine(3, 4);
-            this.setVine(4, 3);
-            this.setVine(4, 4);
-        } else {
-            // 第 3 关及以上：冰霜十字 + 荆棘阵列
-            for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
-                for (let c = 0; c < GAME_CONFIG.COLS; c++) {
-                    if ((r <= 1 || r >= 6) && (c >= 1 && c <= 6)) {
-                        this.setIce(r, c, level >= 4 ? 2 : 1);
-                    }
-                }
-            }
-            this.setVine(2, 2);
-            this.setVine(2, 5);
-            this.setVine(5, 2);
-            this.setVine(5, 5);
-        }
+        const config = getLevel(level);
+        for (const ice of config.ice) this.setIce(ice.row, ice.col, ice.layers);
+        for (const vine of config.vines) this.setVine(vine.row, vine.col);
     }
 
     private setIce(r: number, c: number, iceLevel: number) {
@@ -381,7 +374,6 @@ export class GameManager extends Component {
         const iceDestroyed: Node[] = [];
         const vineSnapped: Node[] = [];
         const vineProtectedTiles = new Set<TileData>();
-        const hadIce = this.totalIceCount > 0;
 
         const handled = new Set<string>();
 
@@ -398,6 +390,7 @@ export class GameManager extends Component {
                 const animal = this.gridData[r][c];
                 if (animal) vineProtectedTiles.add(animal);
                 this.obstacleData[r][c].vine = 0;
+                if (this.levelConfig.goal.kind === 'vine_free') this.pendingGoalProgress++;
                 const vn = this.vineNodes[r][c];
                 if (vn) {
                     this.vineNodes[r][c] = null;
@@ -409,6 +402,7 @@ export class GameManager extends Component {
             // 2. 击碎冰块
             if (this.obstacleData[r][c].ice > 0) {
                 this.obstacleData[r][c].ice--;
+                if (this.levelConfig.goal.kind === 'ice_clear') this.pendingGoalProgress++;
                 const inode = this.iceNodes[r][c];
                 this.score += 200;
 
@@ -467,55 +461,7 @@ export class GameManager extends Component {
 
         this.updateUI();
 
-        // 检查是否清空了全场所有冰块！
-        if (hadIce && this.totalIceCount <= 0) {
-            this.showIceClearBonus();
-        }
         return vineProtectedTiles;
-    }
-
-    /**
-     * 全部冰块清除奖励
-     */
-    private showIceClearBonus() {
-        this.score += 2500;
-        this.remainingMoves += 5;
-        this.updateUI();
-        AudioService.playWin();
-
-        this.bannerLabel.string = '冰块全清！奖励 5 步';
-        Tween.stopAllByTarget(this.bannerNode);
-        this.bannerNode.setScale(0, 0, 1);
-        tween(this.bannerNode)
-            .to(0.18, { scale: v3(1.15, 1.15, 1) }, { easing: 'backOut' })
-            .delay(1.2)
-            .to(0.18, { scale: v3(0, 0, 1) }, { easing: 'backIn' })
-            .start();
-    }
-
-    /**
-     * 关卡无缝升级时为现有棋盘补充新一轮冰霜与荆棘
-     */
-    private addNewObstaclesForLevel(level: number) {
-        let addedIce = 0;
-        let addedVine = 0;
-
-        for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
-            for (let c = 0; c < GAME_CONFIG.COLS; c++) {
-                // 如果该格还没有冰块，且在特征区域，铺设新冰块
-                if (this.obstacleData[r][c].ice === 0 && (r <= 1 || r >= 6 || (r + c) % 3 === 0)) {
-                    if (addedIce < 8 + level * 2) {
-                        this.setIce(r, c, (level >= 3 && Math.random() > 0.4) ? 2 : 1);
-                        addedIce++;
-                    }
-                }
-                // 补充 2~3 处新藤蔓
-                if (this.obstacleData[r][c].vine === 0 && addedVine < Math.min(3, level) && Math.random() < 0.25) {
-                    this.setVine(r, c);
-                    addedVine++;
-                }
-            }
-        }
     }
 
     private showBannerMessage(msg: string) {
@@ -531,14 +477,19 @@ export class GameManager extends Component {
 
     private updateUI() {
         if (this.titleLabel) this.titleLabel.string = `第 ${this.currentLevel} 关`;
-        if (this.movesLabel) this.movesLabel.string = String(this.remainingMoves);
-        if (this.iceLabel) this.iceLabel.string = String(this.totalIceCount);
+        if (this.healthLabel) this.healthLabel.string = `${this.levelState.health} / ${this.levelConfig.maxHealth}`;
+        if (this.healthFill) this.healthFill.setScale(this.levelState.health / this.levelConfig.maxHealth, 1, 1);
+        if (this.dangerLabel) {
+            const remaining = this.levelConfig.dangerInterval - this.levelState.danger;
+            this.dangerLabel.string = `${remaining} 次行动`;
+            this.dangerLabel.color = remaining === 1 ? new Color(222, 70, 73) : new Color(218, 106, 46);
+        }
         if (this.scoreLabel) this.scoreLabel.string = this.score.toLocaleString();
-        if (this.goalLabel) this.goalLabel.string = `目标 ${this.targetScore.toLocaleString()}`;
+        const progress = Math.min(this.levelConfig.goal.required,
+            this.levelState.goalProgress + this.pendingGoalProgress);
+        if (this.goalLabel) this.goalLabel.string = `${goalName(this.levelConfig.goal)} ${progress}/${this.levelConfig.goal.required}`;
         if (this.progressFill) {
-            const levelStart = this.targetScore - GAME_CONFIG.TARGET_SCORE;
-            const progress = (this.score - levelStart) / GAME_CONFIG.TARGET_SCORE;
-            this.progressFill.setScale(Math.max(0.01, Math.min(1, progress)), 1, 1);
+            this.progressFill.setScale(progress / this.levelConfig.goal.required, 1, 1);
         }
     }
 
@@ -704,10 +655,9 @@ export class GameManager extends Component {
             return;
         }
 
-        // 消耗 1 步
-        this.remainingMoves--;
+        // 一次有效行动先结算棋盘，血条压力在整轮连锁结束后处理。
+        this.pendingGoalProgress = 0;
         this.currentCombo = 0;
-        this.updateUI();
         const vineProtectedTiles = new Set<TileData>();
 
         // 彩鸟或双特殊动物组合直接触发；单个特殊动物仍需参与同种匹配。
@@ -1071,6 +1021,10 @@ export class GameManager extends Component {
         for (const t of tiles) {
             const item = this.tileItems[t.row][t.col];
             if (item) {
+                const goal = this.levelConfig.goal;
+                if (goal.kind === 'animal_clear' && t.type === goal.animal && t.special !== SpecialType.RAINBOW) {
+                    this.pendingGoalProgress++;
+                }
                 this.tileItems[t.row][t.col] = null;
                 this.gridData[t.row][t.col] = null;
                 anims.push(item.playEliminate());
@@ -1078,6 +1032,7 @@ export class GameManager extends Component {
         }
 
         await Promise.all(anims);
+        this.updateUI();
     }
 
     /**
@@ -1137,49 +1092,34 @@ export class GameManager extends Component {
             .start();
     }
 
-    /**
-     * 胜负判定与防死局洗牌检测 (无缝连续闯关，绝不刷新地图)
-     */
+    /** 一次有效行动的目标、周期伤害与胜负结算。 */
     private checkGameStatus() {
-        // 达成关卡目标：无缝进入下一关，奖励步数，绝不刷新地图！
-        if (this.score >= this.targetScore) {
-            this.currentLevel++;
-            this.targetScore += 6000;
-            const bonusMoves = 15;
-            this.remainingMoves += bonusMoves;
-            AudioService.playWin();
-            this.showLevelUpBanner(this.currentLevel, bonusMoves);
-            // 为新关卡在当前地图无缝补充新一轮冰霜与荆棘挑战
-            this.addNewObstaclesForLevel(this.currentLevel);
-            this.updateUI();
-        }
+        const result = settleAction(this.levelConfig, this.levelState, this.pendingGoalProgress);
+        this.levelState = result.state;
+        this.pendingGoalProgress = 0;
+        this.updateUI();
 
-        // 步数耗尽检测
-        if (this.remainingMoves <= 0) {
+        if (this.levelState.status === 'won') {
             this.isGameOver = true;
-            this.showEndModal(false, '本轮挑战结束', `到达第 ${this.currentLevel} 关\n收获积分 ${this.score.toLocaleString()}`);
+            AudioService.playWin();
+            this.showEndModal(true, '目标达成！', `第 ${this.currentLevel} 关完成\n收获积分 ${this.score.toLocaleString()}`);
+            return;
+        }
+        if (result.healthLost > 0) {
+            AudioService.playLocked();
+            this.showBannerMessage(`受到 ${result.healthLost} 点伤害！`);
+        } else if (result.shieldUsed > 0) {
+            this.showBannerMessage('护盾挡住了伤害！');
+        }
+        if (this.levelState.status === 'lost') {
+            this.isGameOver = true;
+            this.showEndModal(false, '生命耗尽', `第 ${this.currentLevel} 关挑战失败\n目标进度 ${this.levelState.goalProgress}/${this.levelConfig.goal.required}`);
             return;
         }
 
-        // 死局检测
-        if (!MatchLogic.hasValidMove(this.gridData)) {
+        if (!MatchLogic.hasValidMove(this.gridData, (r, c) => this.obstacleData[r][c].vine > 0)) {
             this.showShuffleNotice();
         }
-    }
-
-    /**
-     * 弹出关卡升级飘字横幅 (轻量提示，不打断手指操作)
-     */
-    private showLevelUpBanner(level: number, bonusMoves: number) {
-        this.bannerLabel.string = `第${level}关完成 +${bonusMoves}步`;
-        Tween.stopAllByTarget(this.bannerNode);
-        this.bannerNode.setScale(0, 0, 1);
-
-        tween(this.bannerNode)
-            .to(0.18, { scale: v3(1.15, 1.15, 1) }, { easing: 'backOut' })
-            .delay(1.2)
-            .to(0.18, { scale: v3(0, 0, 1) }, { easing: 'backIn' })
-            .start();
     }
 
     /**
@@ -1192,7 +1132,7 @@ export class GameManager extends Component {
             .delay(0.8)
             .to(0.15, { scale: v3(0, 0, 1) })
             .call(() => {
-                MatchLogic.shuffle(this.gridData);
+                MatchLogic.shuffle(this.gridData, (r, c) => this.obstacleData[r][c].vine > 0);
                 for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
                     for (let c = 0; c < GAME_CONFIG.COLS; c++) {
                         const item = this.tileItems[r][c];
@@ -1203,9 +1143,7 @@ export class GameManager extends Component {
             .start();
     }
 
-    /**
-     * 结算模态弹窗 (支持保留当前棋盘加步继续玩)
-     */
+    /** 关卡胜负结算。 */
     private showEndModal(isWin: boolean, title: string, desc: string) {
         this.modalNode.removeAllChildren();
         this.modalNode.active = true;
@@ -1255,10 +1193,9 @@ export class GameManager extends Component {
         descL.color = new Color(91, 57, 37);
         panel.addChild(descN);
 
-        // 按钮 1：补充 +10 步继续玩 (保留现有地图不刷新)
-        const addMovesBtn = this.createUINode('AddMovesBtn', 220, 64);
-        addMovesBtn.setPosition(-120, -85, 0);
-        const btnG1 = addMovesBtn.addComponent(Graphics);
+        const primaryBtn = this.createUINode('PrimaryBtn', 220, 64);
+        primaryBtn.setPosition(-120, -85, 0);
+        const btnG1 = primaryBtn.addComponent(Graphics);
         btnG1.fillColor = new Color(232, 112, 82);
         btnG1.roundRect(-110, -32, 220, 64, 18);
         btnG1.fill();
@@ -1268,21 +1205,19 @@ export class GameManager extends Component {
 
         const text1 = this.createUINode('BtnText1', 200, 40);
         const l1 = text1.addComponent(Label);
-        l1.string = '+10 步继续';
+        l1.string = isWin ? (this.currentLevel < LEVELS.length ? '下一关' : '从头挑战') : '重试本关';
         l1.fontSize = 24;
         l1.color = Color.WHITE;
         l1.isBold = true;
-        addMovesBtn.addChild(text1);
+        primaryBtn.addChild(text1);
 
-        addMovesBtn.on(Node.EventType.TOUCH_END, () => {
-            this.remainingMoves += 10;
-            this.isGameOver = false;
-            this.modalNode.active = false;
-            this.updateUI();
+        primaryBtn.on(Node.EventType.TOUCH_END, () => {
+            this.startLevel(isWin && this.currentLevel < LEVELS.length ? this.currentLevel + 1
+                : isWin ? 1 : this.currentLevel);
         });
-        panel.addChild(addMovesBtn);
+        panel.addChild(primaryBtn);
 
-        // 按钮 2：重新开新局 (重置地图)
+        // 随时可以从第一关重新开始。
         const restartBtn = this.createUINode('RestartBtn', 200, 64);
         restartBtn.setPosition(130, -85, 0);
         const btnG2 = restartBtn.addComponent(Graphics);
