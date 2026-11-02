@@ -32,4 +32,5 @@
 
 - [技术路线图](docs/TECHNICAL_ROADMAP.md)：规则引擎、关卡数据、资源与质量体系。
 - [项目迭代计划](docs/ITERATION_PLAN.md)：阶段、里程碑、关卡节奏与发布门槛。
+- [血条关卡规则游玩集](docs/GAMEPLAY_RULESET.md)：单目标、周期受伤、关卡变体与未来遗物接口（规划中）。
 - [用户故事](docs/USER_STORIES.md)：玩家与开发者需求及可验证的验收条件。
