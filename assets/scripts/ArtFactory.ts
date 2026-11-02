@@ -2,7 +2,7 @@ import { ImageAsset, Texture2D, SpriteFrame } from 'cc';
 import { AnimalType, SpecialType } from './Types';
 import { ArtKey, VisualAssets } from './VisualAssets';
 
-/** 将完整的原创 PNG/JPEG 资源转换成 Cocos SpriteFrame。每种道具都是独立图块。 */
+/** 将完整的原创 PNG/JPEG 资源转换成 Cocos SpriteFrame。特殊动物保持原有种类。 */
 export class ArtFactory {
     private static cache: Map<string, SpriteFrame> = new Map();
 
@@ -29,15 +29,13 @@ export class ArtFactory {
     }
 
     public static getTileSprite(type: AnimalType, special: SpecialType): SpriteFrame {
-        const specials: Partial<Record<SpecialType, ArtKey>> = {
-            [SpecialType.HORIZONTAL]: 'special_horizontal',
-            [SpecialType.VERTICAL]: 'special_vertical',
-            [SpecialType.BOMB]: 'special_bomb',
-            [SpecialType.RAINBOW]: 'special_rainbow',
-        };
-        if (special !== SpecialType.NONE) return this.frame(specials[special]!);
+        if (special === SpecialType.RAINBOW) return this.frame('special_rainbow');
         const animals: ArtKey[] = ['chicken', 'frog', 'bear', 'fox', 'owl'];
-        return this.frame(animals[type] || 'bear');
+        const animal = animals[type] || 'bear';
+        if (special === SpecialType.HORIZONTAL) return this.frame(`${animal}_horizontal` as ArtKey);
+        if (special === SpecialType.VERTICAL) return this.frame(`${animal}_vertical` as ArtKey);
+        if (special === SpecialType.BOMB) return this.frame(`${animal}_bomb` as ArtKey);
+        return this.frame(animal);
     }
 
     public static getIceSprite(level: number): SpriteFrame {

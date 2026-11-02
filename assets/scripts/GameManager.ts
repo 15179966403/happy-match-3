@@ -702,7 +702,7 @@ export class GameManager extends Component {
         this.currentCombo = 0;
         this.updateUI();
 
-        // 道具交换直接触发，双道具组合优先结算。
+        // 彩鸟或双特殊动物组合直接触发；单个特殊动物仍需参与同种匹配。
         if (isSpecialCombo) {
             await this.executeSpecialCombo(tile1, tile2);
             // 特殊消除完毕后，立即进行重力下落并填补空缺
@@ -718,14 +718,15 @@ export class GameManager extends Component {
     }
 
     /**
-     * 独立道具和任意相邻棋子交换都能触发。
+     * 彩鸟交换或两个特殊动物交换可直接触发。
      */
     private checkSpecialCombo(t1: TileItem, t2: TileItem): boolean {
-        return t1.data.special !== SpecialType.NONE || t2.data.special !== SpecialType.NONE;
+        return t1.data.special === SpecialType.RAINBOW || t2.data.special === SpecialType.RAINBOW ||
+               (t1.data.special !== SpecialType.NONE && t2.data.special !== SpecialType.NONE);
     }
 
     /**
-     * 执行独立道具或双道具组合效果。
+     * 执行彩鸟或双特殊动物组合效果。
      */
     private async executeSpecialCombo(t1: TileItem, t2: TileItem) {
         const s1 = t1.data.special;
@@ -741,36 +742,42 @@ export class GameManager extends Component {
                 }
             }
         }
-        // 彩鸟 + 方向道具：该方向的光束扫过全棋盘。
+        // 彩鸟 + 方向动物：同种动物变成相同方向的特殊状态并一起触发。
         else if ((s1 === SpecialType.RAINBOW && (s2 === SpecialType.HORIZONTAL || s2 === SpecialType.VERTICAL)) ||
                  (s2 === SpecialType.RAINBOW && (s1 === SpecialType.HORIZONTAL || s1 === SpecialType.VERTICAL))) {
             AudioService.playRainbow();
             const stripeTile = s1 === SpecialType.RAINBOW ? t2 : t1;
+            toEliminate.add(t1.data);
+            toEliminate.add(t2.data);
             for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
                 for (let c = 0; c < GAME_CONFIG.COLS; c++) {
                     const item = this.gridData[r][c];
-                    if (item) toEliminate.add(item);
+                    if (item && item.type === stripeTile.data.type && item.special !== SpecialType.RAINBOW) {
+                        if (item.special === SpecialType.NONE) {
+                            item.special = stripeTile.data.special;
+                            this.tileItems[r][c]?.renderView();
+                        }
+                        toEliminate.add(item);
+                    }
                 }
             }
-            if (stripeTile.data.special === SpecialType.HORIZONTAL) {
-                for (let r = 0; r < GAME_CONFIG.ROWS; r++) this.playLineSweep(r, 0, true);
-            } else {
-                for (let c = 0; c < GAME_CONFIG.COLS; c++) this.playLineSweep(0, c, false);
-            }
         }
-        // 彩鸟 + 炸弹：双重范围爆发，不依赖炸弹内部的动物类型。
+        // 彩鸟 + 爆炸动物：同种动物变成发光爆炸状态并连锁引爆。
         else if ((s1 === SpecialType.RAINBOW && s2 === SpecialType.BOMB) ||
                  (s2 === SpecialType.RAINBOW && s1 === SpecialType.BOMB)) {
             AudioService.playRainbow();
             const bomb = s1 === SpecialType.BOMB ? t1 : t2;
             toEliminate.add(t1.data);
             toEliminate.add(t2.data);
-            for (let dr = -2; dr <= 2; dr++) {
-                for (let dc = -2; dc <= 2; dc++) {
-                    const row = bomb.row + dr, col = bomb.col + dc;
-                    if (row >= 0 && row < GAME_CONFIG.ROWS && col >= 0 && col < GAME_CONFIG.COLS) {
-                        const item = this.gridData[row][col];
-                        if (item) toEliminate.add(item);
+            for (let r = 0; r < GAME_CONFIG.ROWS; r++) {
+                for (let c = 0; c < GAME_CONFIG.COLS; c++) {
+                    const item = this.gridData[r][c];
+                    if (item && item.type === bomb.data.type && item.special !== SpecialType.RAINBOW) {
+                        if (item.special === SpecialType.NONE) {
+                            item.special = SpecialType.BOMB;
+                            this.tileItems[r][c]?.renderView();
+                        }
+                        toEliminate.add(item);
                     }
                 }
             }
@@ -811,14 +818,6 @@ export class GameManager extends Component {
                     }
                 }
             }
-        }
-        // 单个方向道具或炸弹：交换后立刻触发自身效果。
-        else if (s1 === SpecialType.NONE || s2 === SpecialType.NONE) {
-            const special = s1 === SpecialType.NONE ? s2 : s1;
-            if (special === SpecialType.BOMB) AudioService.playBomb();
-            else AudioService.playLineSpecial();
-            toEliminate.add(t1.data);
-            toEliminate.add(t2.data);
         }
         // 9. 条纹 + 炸弹：巨型十字消除 (3行 + 3列)
         else {

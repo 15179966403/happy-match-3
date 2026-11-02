@@ -78,7 +78,7 @@ export class MatchLogic {
             let currentLine: TileData[] = [];
             for (let c = 0; c < cols; c++) {
                 const tile = grid[r][c];
-                if (!tile || tile.special !== SpecialType.NONE) {
+                if (!tile || tile.special === SpecialType.RAINBOW) {
                     if (currentLine.length >= 3) hLines.push([...currentLine]);
                     currentLine = [];
                     continue;
@@ -99,7 +99,7 @@ export class MatchLogic {
             let currentLine: TileData[] = [];
             for (let r = 0; r < rows; r++) {
                 const tile = grid[r][c];
-                if (!tile || tile.special !== SpecialType.NONE) {
+                if (!tile || tile.special === SpecialType.RAINBOW) {
                     if (currentLine.length >= 3) vLines.push([...currentLine]);
                     currentLine = [];
                     continue;
@@ -190,8 +190,9 @@ export class MatchLogic {
         const t2 = grid[r2][c2];
         if (!t1 || !t2) return false;
 
-        // 独立道具没有隐藏颜色，和任意相邻棋子交换都可直接触发。
-        if (t1.special !== SpecialType.NONE || t2.special !== SpecialType.NONE) return true;
+        // 彩鸟或两个特殊动物可以直接组合；普通特殊动物仍需组成同种三连。
+        if (t1.special === SpecialType.RAINBOW || t2.special === SpecialType.RAINBOW) return true;
+        if (t1.special !== SpecialType.NONE && t2.special !== SpecialType.NONE) return true;
 
         // 模拟交换检测
         grid[r1][c1] = t2;
